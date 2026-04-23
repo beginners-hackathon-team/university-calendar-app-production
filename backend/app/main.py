@@ -6,10 +6,12 @@ from app.models.user import User  # uuid_str
 from app.models.course import Course
 from app.models.course_date import CourseDate
 from app.models.enrollment import Enrollment
+from app.models.university_event import University_event
 from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
 from app.schemas.auth import CreateUser, ReadUser
+from app.schemas.university_event import CreateUniEvent, ReadUniEvent
 
 app = FastAPI()
 
@@ -69,39 +71,39 @@ def delete_user(id: str, db: Session = Depends(get_db)):
 #     period: int
 
 
-courses = [
-    ["abc", "情報セキュリティ", "大講義室A", "山田太郎", "2026", 1, "月", 3],
-    ["def", "アルゴリズム", "大講義室B", "山田太郎", "2026", 2, "水", 2],
-    ["ghi", "量子コンピューティング", "大講義室C", "山田太郎", "2026", 3, "金", 4],
-]
+# courses = [
+#     ["abc", "情報セキュリティ", "大講義室A", "山田太郎", "2026", 1, "月", 3],
+#     ["def", "アルゴリズム", "大講義室B", "山田太郎", "2026", 2, "水", 2],
+#     ["ghi", "量子コンピューティング", "大講義室C", "山田太郎", "2026", 3, "金", 4],
+# ]
 
-# id, 授業名, 教室, 先生, 日にちリスト、時限
-calendar = [
-    [
-        "abc",
-        "情報セキュリティ",
-        "大講義室A",
-        "山田太郎",
-        [date(2026, 4, 15), date(2026, 4, 22)],  # クォータの期間内で開催する日のリスト
-        3,
-    ],
-    [
-        "def",
-        "アルゴリズム",
-        "大講義室B",
-        "山田太郎",
-        [date(2026, 4, 16), date(2026, 4, 23)],
-        2,
-    ],
-    [
-        "ghi",
-        "量子コンピューティング",
-        "大講義室C",
-        "山田太郎",
-        [date(2026, 4, 17), date(2026, 4, 24)],
-        4,
-    ],
-]
+# # id, 授業名, 教室, 先生, 日にちリスト、時限
+# calendar = [
+#     [
+#         "abc",
+#         "情報セキュリティ",
+#         "大講義室A",
+#         "山田太郎",
+#         [date(2026, 4, 15), date(2026, 4, 22)],  # クォータの期間内で開催する日のリスト
+#         3,
+#     ],
+#     [
+#         "def",
+#         "アルゴリズム",
+#         "大講義室B",
+#         "山田太郎",
+#         [date(2026, 4, 16), date(2026, 4, 23)],
+#         2,
+#     ],
+#     [
+#         "ghi",
+#         "量子コンピューティング",
+#         "大講義室C",
+#         "山田太郎",
+#         [date(2026, 4, 17), date(2026, 4, 24)],
+#         4,
+#     ],
+# ]
 
 
 # @app.get("/api/courses")
@@ -303,3 +305,19 @@ def update_course(
         "room": course.room,
         "teacher": course.teacher,
     }
+
+
+@app.get("/api/university-events/{year}")
+def get_university_events(year: int, db: Session = Depends(get_db)):
+    events = db.query(University_event).filter(University_event.year == year).all()
+
+    return [
+        {
+            "id": e.id,
+            "name": e.name,
+            "type": e.type,
+            "date": e.date,
+            "original_day": e.original_day,
+        }
+        for e in events
+    ]

@@ -7,10 +7,8 @@ import type { DateSelectArg, EventClickArg } from '@fullcalendar/core/index.js';
 import { useState, useEffect } from 'react';
 import { fetchCalendar } from '../api/calendar';
 import { periodToTime } from '../periodToTime';
+import { fetchUniversityEvents } from '../api/universityEvents';
  
- 
-// ★ 大学行事のJSONをインポート
-import universityEventsData from '../Universityevent_2026.json';
  
 type EventType = {
   title: string;
@@ -72,28 +70,22 @@ export default function CalendarPage() {
         id: `holiday-${date}`
       }));
  
-      // 2. 大学行事データの整形
-      const currentYear = new Date().getFullYear();
-      const univEvents: EventType[] = universityEventsData.map((item, index) => {
-        const month = parseInt(item.date.split('-')[0]);
-        const year = month <= 3 ? currentYear + 1 : currentYear;
-       
-        const displayTitle = item.type === 'transfer' && item.other
-          ? `${item.name}(${item.other}曜授業)`
+      // 2. 大学行事データの取得
+      const univRaw = await fetchUniversityEvents(viewYearMonth.year);
+      const univEvents: EventType[] = univRaw.map((item, index) => {
+        const month = Number(item.date.split('-')[0]);
+        const year = month <= 3 ? viewYearMonth.year + 1 : viewYearMonth.year;
+        const displayTitle = item.type === 'transfer' && item.original_day
+          ? `${item.name}(${item.original_day}曜授業)`
           : item.name;
- 
         const style = getUnivEventStyle(item.type);
- 
         return {
           title: displayTitle,
           start: `${year}-${item.date}`,
-          allDay: true,
-          editable: false,
-          display: 'block',
-          color: style.color,
-          textColor: style.textColor,
+          allDay: true, editable: false, display: 'block',
+          color: style.color, textColor: style.textColor,
           className: 'is-univ-event',
-          id: `univ-${index}`
+          id: `univ-${index}`,
         };
       });
  
