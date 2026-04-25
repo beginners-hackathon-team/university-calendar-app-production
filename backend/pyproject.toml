@@ -10,6 +10,9 @@ dependencies = [
     "alembic>=1.13",
     "pydantic-settings>=2.5",
     "email-validator>=2.3.0",
+    "bcrypt>=5.0.0",
+    "pyjwt>=2.12.1",
+    "python-multipart>=0.0.26",
 ]
 
 

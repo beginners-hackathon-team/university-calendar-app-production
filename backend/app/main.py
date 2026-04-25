@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Response, HTTPException, Depends, status
+from fastapi import FastAPI, Response, HTTPException, Depends, status, Form
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from datetime import date
+from typing import Annotated
 from app.models.user import User  # uuid_str
 from app.models.course import Course
 from app.models.course_date import CourseDate
@@ -11,7 +13,9 @@ from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
 from app.schemas.auth import CreateUser, ReadUser
-from app.schemas.university_event import CreateUniEvent, ReadUniEvent
+from app.schemas.university_event import CreateUniEvent, ReadUniEvent, UpdateUniEvent
+from app.utils.password import hash_password, verify_password
+from app.utils.token import create_access_token, decode_access_token
 
 app = FastAPI()
 
@@ -26,11 +30,13 @@ users = []
 
 @app.post("/api/user")
 def create_user(user: CreateUser, db: Session = Depends(get_db)):
-    user = User(name=user.name, email=user.email, password_hash=user.password)
-    db.add(user)
+    new_user = User(
+        name=user.name, email=user.email, password_hash=hash_password(user.password)
+    )
+    db.add(new_user)
     db.commit()
-    db.refresh(user)
-    return user
+    db.refresh(new_user)
+    return new_user
 
 
 @app.get("/api/users")
@@ -321,3 +327,131 @@ def get_university_events(year: int, db: Session = Depends(get_db)):
         }
         for e in events
     ]
+
+
+"""
+ログイン機能
+"""
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+
+
+@app.post("/api/login")
+def login(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.name == form_data.username).one_or_none()
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = create_access_token(subject=user.id)
+    return {"access_token": token, "token_type": "bearer"}
+
+
+def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)
+) -> User:
+    user_id = decode_access_token(token)
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(User).filter(User.id == user_id).one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return user
+
+
+def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return current_user
+
+
+# 自分の情報を返す
+@app.get("/api/me")
+def read_me(current_user: Annotated[User, Depends(get_current_user)]):
+    return {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "is_admin": current_user.is_admin,
+    }
+
+
+# 大学イベント追加（管理者のみ）
+@app.post("/api/university-events")
+def create_university_event(
+    payload: CreateUniEvent,
+    year: int,
+    admin: Annotated[User, Depends(get_admin_user)],
+    db: Session = Depends(get_db),
+):
+    event = University_event(
+        year=year,
+        name=payload.name,
+        type=payload.type,
+        date=payload.date,
+        original_day=payload.original_day,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+# 大学イベント編集（管理者のみ）
+@app.put("/api/university-events")
+def update_university_event(
+    uni_event_id: str,
+    update_uni_event: UpdateUniEvent,
+    admin: Annotated[User, Depends(get_admin_user)],
+    db: Session = Depends(get_db),
+):
+    event = (
+        db.query(University_event)
+        .filter(University_event.id == uni_event_id)
+        .one_or_none()
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="University Event not found")
+
+    event.name = update_uni_event.name
+    event.year = update_uni_event.year
+    event.type = update_uni_event.type
+    event.date = update_uni_event.date
+    event.original_day = update_uni_event.original_day
+
+    db.commit()
+    db.refresh(event)
+
+    return event
+
+
+# 大学イベント削除（管理者のみ）
+@app.delete("/api/university-events")
+def delete_university_event(
+    uni_event_id: str,
+    admin: Annotated[User, Depends(get_admin_user)],
+    db: Session = Depends(get_db),
+):
+    event = (
+        db.query(University_event)
+        .filter(University_event.id == uni_event_id)
+        .one_or_none()
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="University Event not found")
+
+    db.delete(event)
+    db.commit()
+    return Response(status_code=204)
