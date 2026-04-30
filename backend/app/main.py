@@ -1,8 +1,6 @@
-from fastapi import FastAPI, Response, HTTPException, Depends, status, Form
+from fastapi import FastAPI, Response, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
-from datetime import date
 from typing import Annotated
 from app.models.user import User  # uuid_str
 from app.models.course import Course
@@ -12,8 +10,8 @@ from app.models.university_event import University_event
 from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
-from app.schemas.auth import CreateUser, ReadUser
-from app.schemas.university_event import CreateUniEvent, ReadUniEvent, UpdateUniEvent
+from app.schemas.auth import CreateUser, UserPublic
+from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.utils.password import hash_password, verify_password
 from app.utils.token import create_access_token, decode_access_token
 
@@ -25,7 +23,32 @@ def health():
     return {"status": "ok"}
 
 
-users = []
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+
+
+def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)
+) -> User:
+    user_id = decode_access_token(token)
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(User).filter(User.id == user_id).one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return user
+
+
+def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return current_user
 
 
 @app.post("/api/user")
@@ -39,13 +62,20 @@ def create_user(user: CreateUser, db: Session = Depends(get_db)):
     return new_user
 
 
-@app.get("/api/users")
-def get_users(db: Session = Depends(get_db)):
+@app.get("/api/users", response_model=list[UserPublic])
+def get_users(
+    admin: Annotated[User, Depends(get_admin_user)],
+    db: Session = Depends(get_db),
+):
     return db.query(User).all()
 
 
-@app.get("/api/user/{id}")
-def get_user(id: str, db: Session = Depends(get_db)):
+@app.get("/api/user/{id}", response_model=UserPublic)
+def get_user(
+    id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.id == id).one_or_none()
 
     if not user:
@@ -55,7 +85,14 @@ def get_user(id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/user/{id}")
-def delete_user(id: str, db: Session = Depends(get_db)):
+def delete_user(
+    id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    if current_user.id != id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     user = db.query(User).filter(User.id == id).one_or_none()
 
     if not user:
@@ -66,59 +103,12 @@ def delete_user(id: str, db: Session = Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# 講義登録
-# class CreateCourse(BaseModel):
-#     name: str
-#     room: str
-#     teacher: str
-#     year: int
-#     quarter: int
-#     day_of_week: str
-#     period: int
-
-
-# courses = [
-#     ["abc", "情報セキュリティ", "大講義室A", "山田太郎", "2026", 1, "月", 3],
-#     ["def", "アルゴリズム", "大講義室B", "山田太郎", "2026", 2, "水", 2],
-#     ["ghi", "量子コンピューティング", "大講義室C", "山田太郎", "2026", 3, "金", 4],
-# ]
-
-# # id, 授業名, 教室, 先生, 日にちリスト、時限
-# calendar = [
-#     [
-#         "abc",
-#         "情報セキュリティ",
-#         "大講義室A",
-#         "山田太郎",
-#         [date(2026, 4, 15), date(2026, 4, 22)],  # クォータの期間内で開催する日のリスト
-#         3,
-#     ],
-#     [
-#         "def",
-#         "アルゴリズム",
-#         "大講義室B",
-#         "山田太郎",
-#         [date(2026, 4, 16), date(2026, 4, 23)],
-#         2,
-#     ],
-#     [
-#         "ghi",
-#         "量子コンピューティング",
-#         "大講義室C",
-#         "山田太郎",
-#         [date(2026, 4, 17), date(2026, 4, 24)],
-#         4,
-#     ],
-# ]
-
-
-# @app.get("/api/courses")
-# def get_courses():
-#     return courses
-
-
 @app.post("/api/course")
-def create_course(create_course: CreateCourse, db: Session = Depends(get_db)):
+def create_course(
+    create_course: CreateCourse,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
     course = Course(
         name=create_course.name, room=create_course.room, teacher=create_course.teacher
     )
@@ -137,26 +127,25 @@ def create_course(create_course: CreateCourse, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(course_date)
 
-    user = db.query(User).first()
-    enroll = Enrollment(course_id=course.id, user_id=user.id)
+    enroll = Enrollment(course_id=course.id, user_id=current_user.id)
     db.add(enroll)
     db.commit()
-    db.refresh(enroll)
 
-    # return course, course_date
     return
 
 
 @app.get("/api/calendar/{year_month}")
-def get_calendar(year_month: str, db: Session = Depends(get_db)):
+def get_calendar(
+    year_month: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
     # URL例: /api/calendar/2026-4 （年度-月）
     year, month = map(int, year_month.split("-"))
 
-    user = db.query(User).first()
-    if not user:
-        return []
-
-    enrollments = db.query(Enrollment).filter(Enrollment.user_id == user.id).all()
+    enrollments = (
+        db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+    )
     if not enrollments:
         return []
 
@@ -195,7 +184,22 @@ def get_calendar(year_month: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/course/{course_id}")
-def delete_course(course_id: str, db: Session = Depends(get_db)):
+def delete_course(
+    course_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    enrollment = (
+        db.query(Enrollment)
+        .filter(
+            Enrollment.user_id == current_user.id,
+            Enrollment.course_id == course_id,
+        )
+        .one_or_none()
+    )
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+
     course = db.query(Course).filter(Course.id == course_id).one_or_none()
 
     if not course:
@@ -207,7 +211,10 @@ def delete_course(course_id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/courses")
-def delete_all_courses(db: Session = Depends(get_db)):
+def delete_all_courses(
+    admin: Annotated[User, Depends(get_admin_user)],
+    db: Session = Depends(get_db),
+):
     courses = db.query(Course).all()
 
     for course in courses:
@@ -218,14 +225,16 @@ def delete_all_courses(db: Session = Depends(get_db)):
 
 
 @app.get("/api/courses/{year_quarter}")
-def get_courses(year_quarter: str, db: Session = Depends(get_db)):
+def get_courses(
+    year_quarter: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
     year, quarter = map(int, year_quarter.split("-"))
 
-    user = db.query(User).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    enrollments = db.query(Enrollment).filter(Enrollment.user_id == user.id).all()
+    enrollments = (
+        db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+    )
 
     if not enrollments:
         return []
@@ -268,24 +277,17 @@ def get_courses(year_quarter: str, db: Session = Depends(get_db)):
     return result
 
 
-# class UpdateCourse(BaseModel):
-#     name: str
-#     room: str
-#     teacher: str
-
-
 @app.put("/api/course/{course_id}")
 def update_course(
-    course_id: str, update_course: UpdateCourse, db: Session = Depends(get_db)
+    course_id: str,
+    update_course: UpdateCourse,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ):
-    user = db.query(User).order_by(User.id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
     enrollment = (
         db.query(Enrollment)
         .filter(
-            Enrollment.user_id == user.id,
+            Enrollment.user_id == current_user.id,
             Enrollment.course_id == course_id,
         )
         .one_or_none()
@@ -314,7 +316,11 @@ def update_course(
 
 
 @app.get("/api/university-events/{year}")
-def get_university_events(year: int, db: Session = Depends(get_db)):
+def get_university_events(
+    year: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
     events = db.query(University_event).filter(University_event.year == year).all()
 
     return [
@@ -332,7 +338,6 @@ def get_university_events(year: int, db: Session = Depends(get_db)):
 """
 ログイン機能
 """
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
 
 @app.post("/api/login")
@@ -350,31 +355,6 @@ def login(
 
     token = create_access_token(subject=user.id)
     return {"access_token": token, "token_type": "bearer"}
-
-
-def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)
-) -> User:
-    user_id = decode_access_token(token)
-
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user = db.query(User).filter(User.id == user_id).one_or_none()
-
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    return user
-
-
-def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if not current_user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
-    return current_user
 
 
 # 自分の情報を返す
@@ -410,7 +390,7 @@ def create_university_event(
 
 
 # 大学イベント編集（管理者のみ）
-@app.put("/api/university-events")
+@app.put("/api/university-events/{uni_event_id}")
 def update_university_event(
     uni_event_id: str,
     update_uni_event: UpdateUniEvent,
@@ -438,7 +418,7 @@ def update_university_event(
 
 
 # 大学イベント削除（管理者のみ）
-@app.delete("/api/university-events")
+@app.delete("/api/university-events/{uni_event_id}")
 def delete_university_event(
     uni_event_id: str,
     admin: Annotated[User, Depends(get_admin_user)],

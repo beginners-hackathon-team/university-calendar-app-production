@@ -1,3 +1,5 @@
+import { authFetch } from "./client";
+
 export type UniversityEvent = {
     id: string;
     name: string;
@@ -7,7 +9,34 @@ export type UniversityEvent = {
 };
 
 export async function fetchUniversityEvents(year: number): Promise<UniversityEvent[]> {
-    const res = await fetch(`/api/university-events/${year}`);
+    const res = await authFetch(`/api/university-events/${year}`);
     if (!res.ok) throw new Error('大学イベントの取得に失敗しました');
     return res.json()
+}
+
+export async function createUniversityEvent(year: number, event: Omit<UniversityEvent, 'id'>) { // OmitでUniversityEventからidを除く->サーバーがidを生成するので必要ない
+    const res = await authFetch(`/api/university-events?year=${year}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json'},
+        body: JSON.stringify(event)
+    });
+    if (!res.ok) throw new Error('追加に失敗しました');
+    return res.json();
+}
+
+export async function updateUniversityEvent(id: string, event: Omit<UniversityEvent, 'id'>) {
+    const res = await authFetch(`/api/university-events/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json'},
+        body: JSON.stringify(event)
+    });
+    if (!res.ok) throw new Error('更新に失敗しました');
+    return res.json();
+}
+
+export async function deleteUniversityEvent(id: string) {
+    const res = await authFetch(`/api/university-events/${id}`, {
+        method: 'DELETE'
+    });
+    if(!res.ok) throw new Error('削除に失敗しました');
 }
