@@ -1,28 +1,30 @@
-import React, { useState, type FormEvent} from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { login } from "../api/auth";
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { login, register } from "../api/auth";
 
-export default function LoginPage() {
+export default function RegisterPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setError('');
-        
+
         try {
+            await register(username, password, email);
             await login(username, password);
             navigate('/');
-        } catch {
-            setError('ユーザー名またはパスワードが違います');
+        } catch (err) {
+            setError((err as Error).message)
         }
     };
 
     return (
         <div style={{ maxWidth: 360, margin: '80px auto', padding: 24 }}>
-        <h1>ログイン</h1>
+        <h1>ユーザー登録</h1>
         <form onSubmit={handleSubmit}>
             <input
             placeholder="ユーザー名"
@@ -37,10 +39,16 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             />
-            <button type="submit">ログイン</button>
+            <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            />
+            <button type="submit">登録</button>
             {error && <p style={{ color: 'red' }}>{error}</p>}
         </form>
-        <p>アカウントをお持ちでない方は <Link to="/register">新規登録</Link></p>
         </div>
     );
 }

@@ -7,7 +7,7 @@ import { isAuthenticated } from "./api/auth";
 import React from "react";
 import AdminEventsPage from "./pages/AdminEventsPage";
 import { useMe } from "./hooks/useMe";
-
+import RegisterPage from "./pages/RegisterPage";
 
 function AdminRoute({ children }: { children: React.ReactNode}) {
     const { isAdmin, loading } = useMe();
@@ -20,11 +20,16 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+function GuestRoute({ children }: { children: React.ReactNode }) {
+  return isAuthenticated() ? <Navigate to="/" replace /> : <>{children}</>;
+}
+
 export default function App() {
     
     return (
         <Routes>
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+            <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
 
             <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
                 <Route path="/" element={<CalendarPage />} />
