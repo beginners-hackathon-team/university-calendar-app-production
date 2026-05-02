@@ -13,7 +13,7 @@ export default function AdminEventsPage() {
   const [year, setYear] = useState(2026);
   const [events, setEvents] = useState<UniversityEvent[]>([]);
   const [editing, setEditing] = useState<UniversityEvent | null>(null);
-  const [form, setForm] = useState({ name: '', type: 'other', date: '', other: '' });
+  const [form, setForm] = useState({ name: '', type: 'other', date: '', original_day: '' });
 
   const load = async () => {
     const data = await fetchUniversityEvents(year);
@@ -22,19 +22,20 @@ export default function AdminEventsPage() {
   useEffect(() => { load(); }, [year]);
 
   const handleSave = async () => {
+    const data = {...form, year};
     if (editing) {
-      await updateUniversityEvent(editing.id, form as any);
+      await updateUniversityEvent(editing.id, data as any);
     } else {
-      await createUniversityEvent(year, form as any);
+      await createUniversityEvent(data as any);
     }
-    setForm({ name: '', type: 'other', date: '', other: '' });
+    setForm({ name: '', type: 'other', date: '', original_day: '' });
     setEditing(null);
     load();
   };
 
   const handleEdit = (ev: UniversityEvent) => {
     setEditing(ev);
-    setForm({ name: ev.name, type: ev.type, date: ev.date, other: ev.original_day });
+    setForm({ name: ev.name, type: ev.type, date: ev.date, original_day: ev.original_day });
   };
 
   const handleDelete = async (id: string) => {
@@ -60,10 +61,10 @@ export default function AdminEventsPage() {
       </select>
       <input placeholder="MM-DD" value={form.date}
              onChange={(e) => setForm({ ...form, date: e.target.value })} />
-      <input placeholder="other(振替元曜日など)" value={form.other}
-             onChange={(e) => setForm({ ...form, other: e.target.value })} />
+      <input placeholder="other(振替元曜日など)" value={form.original_day}
+             onChange={(e) => setForm({ ...form, original_day: e.target.value })} />
       <button onClick={handleSave}>{editing ? '更新' : '追加'}</button>
-      {editing && <button onClick={() => { setEditing(null); setForm({ name: '', type: 'other', date: '', other: '' }); }}>キャンセル</button>}
+      {editing && <button onClick={() => { setEditing(null); setForm({ name: '', type: 'other', date: '', original_day: '' }); }}>キャンセル</button>}
 
       <h2>一覧 ({year}年度)</h2>
       <table>

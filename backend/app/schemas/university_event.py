@@ -15,4 +15,4 @@ class ReadUniEvent(CreateUniEvent):
 
 
 class UpdateUniEvent(CreateUniEvent):
-    id: str
+    pass

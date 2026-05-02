@@ -372,12 +372,11 @@ def read_me(current_user: Annotated[User, Depends(get_current_user)]):
 @app.post("/api/university-events")
 def create_university_event(
     payload: CreateUniEvent,
-    year: int,
     admin: Annotated[User, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = University_event(
-        year=year,
+        year=payload.year,
         name=payload.name,
         type=payload.type,
         date=payload.date,

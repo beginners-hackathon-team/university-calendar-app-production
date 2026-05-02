@@ -14,8 +14,8 @@ export async function fetchUniversityEvents(year: number): Promise<UniversityEve
     return res.json()
 }
 
-export async function createUniversityEvent(year: number, event: Omit<UniversityEvent, 'id'>) { // OmitでUniversityEventからidを除く->サーバーがidを生成するので必要ない
-    const res = await authFetch(`/api/university-events?year=${year}`, {
+export async function createUniversityEvent(event: Omit<UniversityEvent, 'id'> & { year: number}) { // OmitでUniversityEventからidを除く->サーバーがidを生成するので必要ない
+    const res = await authFetch(`/api/university-events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json'},
         body: JSON.stringify(event)
@@ -24,11 +24,11 @@ export async function createUniversityEvent(year: number, event: Omit<University
     return res.json();
 }
 
-export async function updateUniversityEvent(id: string, event: Omit<UniversityEvent, 'id'>) {
+export async function updateUniversityEvent(id: string, event: Omit<UniversityEvent, 'id'> & { year: number}) {
     const res = await authFetch(`/api/university-events/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify(event)
+        body: JSON.stringify(event),
     });
     if (!res.ok) throw new Error('更新に失敗しました');
     return res.json();
