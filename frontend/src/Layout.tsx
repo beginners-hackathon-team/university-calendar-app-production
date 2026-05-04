@@ -1,7 +1,18 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { useMe } from "./hooks/useMe";
+import { logout } from "./api/auth";
+import { useNavigate } from "react-router-dom";
+
 
 export default function Layout() {
     const location = useLocation();
+    const { isAdmin } = useMe();
+    
+    const navigate = useNavigate();
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    }
 
     const navItems = [
         { to: "/", label: "カレンダー" },
@@ -39,6 +50,17 @@ export default function Layout() {
         borderBottom: active ? "2px solid #2563eb" : "2px solid transparent",
     });
 
+    const logoutButtonStyle: React.CSSProperties = {
+    padding: "6px 14px",
+    marginLeft: "16px",
+    color: "#6b7280",
+    background: "transparent",
+    border: "1px solid #e5e7eb",
+    borderRadius: "6px",
+    fontSize: "14px",
+    cursor: "pointer",
+};
+
     return (
         <>
             <header style={headerStyle}>
@@ -56,6 +78,8 @@ export default function Layout() {
                                 {item.label}
                             </Link>
                         ))}
+                        {isAdmin && <Link to="/admin/events" style={getLinkStyle(location.pathname === '/admin/events')}>大学イベント管理</Link>}
+                        <button onClick={handleLogout} style={logoutButtonStyle}>ログアウト</button>
                     </nav>
                 </div>
             </header>

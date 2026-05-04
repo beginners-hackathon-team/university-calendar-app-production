@@ -19,3 +19,13 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str
+
+
+class UserPublic(BaseModel):
+    id: str
+    name: str
+    email: EmailStr
+    is_admin: bool
+
+    class Config:
+        from_attributes = True

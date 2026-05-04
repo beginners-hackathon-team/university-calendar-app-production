@@ -1,4 +1,6 @@
 // オブジェクト形式の型（バックエンドの /api/calendar/{year-month} と対応）
+import { authFetch } from "./client";
+
 export type FormattedCourse = {
   id: string;
   name: string;
@@ -9,7 +11,7 @@ export type FormattedCourse = {
 };
 
 export async function fetchCalendar(year: number, month: number): Promise<FormattedCourse[]> {
-  const res = await fetch(`/api/calendar/${year}-${month}`);
+  const res = await authFetch(`/api/calendar/${year}-${month}`);
 
   if (!res.ok) {
     throw new Error('カレンダーデータの取得に失敗しました');

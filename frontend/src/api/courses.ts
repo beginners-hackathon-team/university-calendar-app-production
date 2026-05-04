@@ -1,5 +1,7 @@
+import { authFetch } from "./client";
+
 export async function fetchCourses(year: number, quarter: number) {
-    const res = await fetch(`/api/courses/${year}-${quarter}`);
+    const res = await authFetch(`/api/courses/${year}-${quarter}`);
     if (!res.ok) throw new Error('取得失敗');
     return res.json();
 }
@@ -13,7 +15,7 @@ export async function createCourses(data:{
     day_of_week: string;
     period: number;
 }) {
-    const res = await fetch('/api/course', {
+    const res = await authFetch('/api/course', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json'},
         body: JSON.stringify(data),
@@ -32,7 +34,7 @@ export async function updateCourse(
 }) {
     const url = `/api/course/${courseId}`;
 
-    const res = await fetch(url, {
+    const res = await authFetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -42,7 +44,7 @@ export async function updateCourse(
 }
 
 export async function deleteCourse(courseId: string) {
-    const res = await fetch(`/api/course/${courseId}`, {
+    const res = await authFetch(`/api/course/${courseId}`, {
         method: 'DELETE',
     });
     if (!res.ok) throw new Error('削除失敗');

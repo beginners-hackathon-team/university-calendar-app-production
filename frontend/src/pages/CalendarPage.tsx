@@ -4,13 +4,11 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import jaLocale from '@fullcalendar/core/locales/ja';
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core/index.js';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchCalendar } from '../api/calendar';
 import { periodToTime } from '../periodToTime';
+import { fetchUniversityEvents } from '../api/universityEvents';
  
- 
-// ★ 大学行事のJSONをインポート
-import universityEventsData from '../Universityevent_2026.json';
  
 type EventType = {
   title: string;
@@ -32,6 +30,8 @@ export default function CalendarPage() {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
+
+  const calendarRef = useRef<FullCalendar>(null);
  
   const getLocalDateString = (date: Date) => {
     const year = date.getFullYear();
@@ -72,28 +72,22 @@ export default function CalendarPage() {
         id: `holiday-${date}`
       }));
  
-      // 2. 大学行事データの整形
-      const currentYear = new Date().getFullYear();
-      const univEvents: EventType[] = universityEventsData.map((item, index) => {
-        const month = parseInt(item.date.split('-')[0]);
-        const year = month <= 3 ? currentYear + 1 : currentYear;
-       
-        const displayTitle = item.type === 'transfer' && item.other
-          ? `${item.name}(${item.other}曜授業)`
+      // 2. 大学行事データの取得
+      const univRaw = await fetchUniversityEvents(viewYearMonth.year);
+      const univEvents: EventType[] = univRaw.map((item, index) => {
+        const month = Number(item.date.split('-')[0]);
+        const year = month <= 3 ? viewYearMonth.year + 1 : viewYearMonth.year;
+        const displayTitle = item.type === 'transfer' && item.original_day
+          ? `${item.name}(${item.original_day}曜授業)`
           : item.name;
- 
         const style = getUnivEventStyle(item.type);
- 
         return {
           title: displayTitle,
           start: `${year}-${item.date}`,
-          allDay: true,
-          editable: false,
-          display: 'block',
-          color: style.color,
-          textColor: style.textColor,
+          allDay: true, editable: false, display: 'block',
+          color: style.color, textColor: style.textColor,
           className: 'is-univ-event',
-          id: `univ-${index}`
+          id: `univ-${index}`,
         };
       });
  
@@ -171,9 +165,21 @@ export default function CalendarPage() {
       setEvents(prev => prev.filter(event => event.id !== clickInfo.event.id));
     }
   };
+
+  // 表示のデフォルトを8時に
+  useEffect(() => {
+    calendarRef.current?.getApi().scrollToTime('08:00:00');
+  }, [events])
  
   return (
-    <div style={{ padding: '20px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div style={{
+      padding: '20px',
+      backgroundColor: '#f9fafb',
+      height: 'calc(100vh - 80px',          // minHeight → height（伸びないように固定）
+      boxSizing: 'border-box',  // paddingを高さに含める
+      overflow: 'hidden',       // はみ出したら隠す（=スクロール禁止）
+    }}>
+
      
       <style>{`
         .fc {
@@ -217,9 +223,13 @@ export default function CalendarPage() {
             prev.year === next.year && prev.month === next.month ? prev : next
           );
         }}
+        ref={calendarRef}
+
+        height="calc(100vh - 200px)"
+
        
         // 元のコードにあった詳細設定を維持
-        scrollTime="07:00:00"
+        scrollTime="08:00:00"
         slotDuration="00:30:00"
         snapDuration="00:05:00"
         slotLabelInterval="01:00:00"
