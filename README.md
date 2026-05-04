@@ -98,9 +98,10 @@ uv run alembic upgrade head
 ### 2. 大学イベントの初期投入（年度別）
 ```bash
 cd backend
-uv run python -m app.db.seed_university_event ../frontend/src/Universityevent.json
+uv run python -m app.db.seed_university_event data/universityevent_2026.json
 ```
-> JSON は `{ "year": 2026, "events": [...] }` 形式。
+> JSON は `{ "year": 2026, "events": [...] }` 形式。`backend/data/` 配下に年度別ファイルを置く。
+> 本番環境（Render）でも同じスクリプトを Shell から実行（パスは `data/universityevent_2026.json`）。
 
 ### 3. 初期管理者ユーザーの作成
 ユーザー登録 API でユーザーを作成後、SQL で `is_admin` を付与：

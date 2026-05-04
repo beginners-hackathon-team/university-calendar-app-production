@@ -1,5 +1,8 @@
 from fastapi import FastAPI, Response, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
 from sqlalchemy.orm import Session
 from typing import Annotated
 from app.models.user import User  # uuid_str
@@ -434,3 +437,23 @@ def delete_university_event(
     db.delete(event)
     db.commit()
     return Response(status_code=204)
+
+
+# 静的ファイル配信（本番のみ。frontendのビルド成果物が static/ にある場合に有効）
+STATIC_DIR = Path(__file__).parent.parent / "static"
+if STATIC_DIR.exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=STATIC_DIR / "assets"),
+        name="assets",
+    )
+
+    # SPA fallback: /api 以外のパスは index.html を返し、React Router に任せる
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        index = STATIC_DIR / "index.html"
+        if index.exists():
+            return FileResponse(index)
+        raise HTTPException(status_code=404)

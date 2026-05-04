@@ -65,6 +65,31 @@ Settings → Build & Deploy → Auto-Deploy: **Yes**, Branch: `main`
 - `/api/health` で `{"status":"ok"}`
 - 初回ビルドは 5〜10分
 
+### 7. 初回データ投入（1度だけ）
+
+DBが空なので、初期データを投入する。Render Web Service の **Shell** タブから実行：
+
+```bash
+# 大学イベントを投入
+uv run python -m app.db.seed_university_event data/universityevent_2026.json
+```
+
+### 8. 初期管理者ユーザーの作成
+
+ローカル or 本番のどちらでもユーザー登録 → SQL で昇格：
+
+```bash
+# 1. 本番URLでユーザー登録（Webからでも可）
+curl -X POST https://<service-name>.onrender.com/api/user \
+  -H "Content-Type: application/json" \
+  -d '{"name":"admin","email":"admin@example.com","password":"<strong-pw>"}'
+```
+
+```sql
+-- 2. Render Database の Shell タブから実行
+UPDATE users SET is_admin = true WHERE email = 'admin@example.com';
+```
+
 ---
 
 ## 手順

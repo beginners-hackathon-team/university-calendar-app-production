@@ -29,6 +29,7 @@ RUN uv sync --no-dev --frozen --no-install-project
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
+COPY backend/data ./data
 COPY --from=frontend /backend/static ./static
 
 CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
