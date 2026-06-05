@@ -21,7 +21,13 @@ type EventType = {
   display?: string;
   textColor?: string;
   end?: string;
+  type?: string;
+  original_day?: string;
 }
+
+const DAY_MAP: Record<string, number> = {
+  "日": 0, "月": 1, "火": 2, "水": 3, "木": 4, "金": 5, "土": 6,
+};
  
 export default function CalendarPage() {
   const [events, setEvents] = useState<EventType[]>([]);
@@ -88,6 +94,8 @@ export default function CalendarPage() {
           color: style.color, textColor: style.textColor,
           className: 'is-univ-event',
           id: `univ-${index}`,
+          type: item.type,
+          original_day: item.original_day,
         };
       });
  
@@ -232,6 +240,11 @@ export default function CalendarPage() {
         scrollTime="08:00:00"
         slotDuration="00:30:00"
         snapDuration="00:05:00"
+        eventTimeFormat={{
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }}
         slotLabelInterval="01:00:00"
        
         // 祝日(is-holiday)の時だけ日付を赤くする（大学行事は含めない）
@@ -258,10 +271,56 @@ export default function CalendarPage() {
               .filter(e => e.className === 'is-holiday')
               .map(e => (typeof e.start === 'string' ? e.start.split('T')[0] : ''))
           );
-          return events.filter(e => {
+
+          // 振替日マップ：{ 振替日(YYYY-MM-DD) → 振替元曜日番号 }
+          const transferMap = new Map<string, number>();
+          events.forEach(e => {
+            if (
+              e.className === 'is-univ-event' &&
+              e.type === 'transfer' &&
+              e.original_day &&
+              typeof e.start === 'string'
+            ) {
+              const dateStr = e.start.split('T')[0] ?? '';
+              const weekday = DAY_MAP[e.original_day];
+              if (weekday !== undefined) transferMap.set(dateStr, weekday);
+            }
+          });
+
+          // 振替先曜日の授業をテンプレートとして抽出し、振替日に複製
+          const addedEvents: EventType[] = [];
+          transferMap.forEach((substituteWeekday, transferDate) => {
+            const seen = new Set<string>();
+            events.forEach(e => {
+              if (e.className !== 'is-course' || typeof e.start !== 'string') return;
+              if (new Date(e.start).getDay() !== substituteWeekday) return;
+              const match = (e.id ?? '').match(/^course-(.+)-\d{4}-\d{2}-\d{2}$/);
+              const courseId = match ? match[1] : '';
+              const time = e.start.split('T')[1] ?? '';
+              const key = `${courseId}-${time}`;
+              if (seen.has(key)) return;
+              seen.add(key);
+
+              const newStart = e.start.replace(/^\d{4}-\d{2}-\d{2}/, transferDate);
+              const newEnd = e.end?.replace(/^\d{4}-\d{2}-\d{2}/, transferDate);
+              addedEvents.push({
+                ...e,
+                id: `transfer-${transferDate}-${courseId}-${time}`,
+                start: newStart,
+                end: newEnd,
+              });
+            });
+          });
+
+          return [...events, ...addedEvents].filter(e => {
             if (e.className !== 'is-course') return true;
-            const dateOnly = typeof e.start === 'string' ? e.start.split('T')[0] : '';
-            return !holidayDates.has(dateOnly);
+            const dateOnly = typeof e.start === 'string' ? (e.start.split('T')[0] ?? '') : '';
+            if (holidayDates.has(dateOnly)) return false;
+            // 振替日に該当する元の授業（=その日の曜日の授業）は除外
+            if (transferMap.has(dateOnly) && !(e.id ?? '').startsWith('transfer-')) {
+              return false;
+            }
+            return true;
           });
         })()}
       />
