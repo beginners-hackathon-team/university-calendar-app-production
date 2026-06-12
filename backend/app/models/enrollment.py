@@ -11,6 +11,4 @@ class Enrollment(Base):
     course_id: Mapped[str] = mapped_column(
         String, ForeignKey("courses.id", ondelete="CASCADE")
     )
-    user_id: Mapped[str] = mapped_column(
-        String, ForeignKey("profiles.user_id", ondelete="CASCADE")
-    )
+    user_id: Mapped[str] = mapped_column(String)
