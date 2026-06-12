@@ -73,7 +73,7 @@ def get_current_user(
 ) -> Profile:
     profile = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Profile not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
     return profile
 
 

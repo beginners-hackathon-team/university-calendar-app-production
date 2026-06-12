@@ -44,7 +44,7 @@ export default function App() {
                 const check = await fetch('/api/me', {
                     headers: { Authorization: `Bearer ${session.access_token}` },
                 });
-                if (check.status === 401) {
+                if (check.status === 404) {
                     const displayName =
                         (session.user.user_metadata?.full_name as string | undefined)
                         ?? session.user.email?.split('@')[0]
