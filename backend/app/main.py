@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from fastapi import FastAPI, Response, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -9,7 +10,6 @@ from typing import Annotated
 import jwt
 from jwt import PyJWKClient
 
-from app.models.profile import Profile
 from app.models.course import Course
 from app.models.course_date import CourseDate
 from app.models.enrollment import Enrollment
@@ -19,11 +19,18 @@ from app.models.todo import Todo
 from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
-from app.schemas.auth import CreateProfile, ProfilePublic
 from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
 from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, TodoPublic, CreateTodo, UpdateTodo
 from app.core.config import settings
+
+
+@dataclass
+class CurrentUser:
+    user_id: str
+    email: str
+    display_name: str
+    is_admin: bool
 
 app = FastAPI()
 
@@ -45,8 +52,8 @@ def health():
     return {"status": "ok"}
 
 
-def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]) -> str:
-    """SupabaseのJWTをJWKSで検証し、auth.users.id (sub) を返す。"""
+def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]) -> dict:
+    """SupabaseのJWTをJWKSで検証し、ペイロードを返す。"""
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
         payload = jwt.decode(
@@ -55,10 +62,9 @@ def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Dep
             algorithms=["ES256", "RS256"],
             options={"verify_aud": False},
         )
-        sub: str | None = payload.get("sub")
-        if sub is None:
+        if payload.get("sub") is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return sub
+        return payload
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,41 +73,28 @@ def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Dep
         )
 
 
-def get_current_user(
-    user_id: Annotated[str, Depends(verify_supabase_jwt)],
-    db: Session = Depends(get_db),
-) -> Profile:
-    profile = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
-    if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-    return profile
+def get_current_user(payload: Annotated[dict, Depends(verify_supabase_jwt)]) -> CurrentUser:
+    """JWTペイロードからユーザー情報を組み立てる（DBアクセスなし）。"""
+    user_metadata = payload.get("user_metadata") or {}
+    app_metadata = payload.get("app_metadata") or {}
+    email = payload.get("email", "")
+    display_name = user_metadata.get("full_name") or email.split("@")[0]
+    return CurrentUser(
+        user_id=payload["sub"],
+        email=email,
+        display_name=display_name,
+        is_admin=bool(app_metadata.get("is_admin", False)),
+    )
 
 
-def get_admin_user(current_user: Annotated[Profile, Depends(get_current_user)]) -> Profile:
+def get_admin_user(current_user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return current_user
 
 
-@app.post("/api/profiles", status_code=201)
-def create_profile(
-    body: CreateProfile,
-    user_id: Annotated[str, Depends(verify_supabase_jwt)],
-    db: Session = Depends(get_db),
-):
-    existing = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
-    if existing:
-        return existing
-
-    profile = Profile(user_id=user_id, display_name=body.display_name)
-    db.add(profile)
-    db.commit()
-    db.refresh(profile)
-    return profile
-
-
 @app.get("/api/me")
-def read_me(current_user: Annotated[Profile, Depends(get_current_user)]):
+def read_me(current_user: Annotated[CurrentUser, Depends(get_current_user)]):
     return {
         "id": current_user.user_id,
         "display_name": current_user.display_name,
@@ -109,36 +102,10 @@ def read_me(current_user: Annotated[Profile, Depends(get_current_user)]):
     }
 
 
-@app.get("/api/users", response_model=list[ProfilePublic])
-def get_users(
-    admin: Annotated[Profile, Depends(get_admin_user)],
-    db: Session = Depends(get_db),
-):
-    return db.query(Profile).all()
-
-
-@app.delete("/api/user/{user_id}")
-def delete_user(
-    user_id: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-):
-    if current_user.user_id != user_id and not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    profile = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
-    if not profile:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    db.delete(profile)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
 @app.post("/api/course")
 def create_course(
     create_course: CreateCourse,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     course = Course(
@@ -169,7 +136,7 @@ def create_course(
 @app.get("/api/calendar/{year_month}")
 def get_calendar(
     year_month: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     year, month = map(int, year_month.split("-"))
@@ -219,7 +186,7 @@ def get_calendar(
 @app.delete("/api/course/{course_id}")
 def delete_course(
     course_id: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     enrollment = (
@@ -244,7 +211,7 @@ def delete_course(
 
 @app.delete("/api/courses")
 def delete_all_courses(
-    admin: Annotated[Profile, Depends(get_admin_user)],
+    admin: Annotated[CurrentUser, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     courses = db.query(Course).all()
@@ -257,7 +224,7 @@ def delete_all_courses(
 @app.get("/api/courses/{year_quarter}")
 def get_courses(
     year_quarter: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     year, quarter = map(int, year_quarter.split("-"))
@@ -310,7 +277,7 @@ def get_courses(
 def update_course(
     course_id: str,
     update_course: UpdateCourse,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     enrollment = (
@@ -346,7 +313,7 @@ def update_course(
 @app.get("/api/university-events/{year}")
 def get_university_events(
     year: int,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     events = db.query(University_event).filter(University_event.year == year).all()
@@ -365,7 +332,7 @@ def get_university_events(
 @app.post("/api/university-events")
 def create_university_event(
     payload: CreateUniEvent,
-    admin: Annotated[Profile, Depends(get_admin_user)],
+    admin: Annotated[CurrentUser, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = University_event(
@@ -385,7 +352,7 @@ def create_university_event(
 def update_university_event(
     uni_event_id: str,
     update_uni_event: UpdateUniEvent,
-    admin: Annotated[Profile, Depends(get_admin_user)],
+    admin: Annotated[CurrentUser, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = (
@@ -410,7 +377,7 @@ def update_university_event(
 @app.delete("/api/university-events/{uni_event_id}")
 def delete_university_event(
     uni_event_id: str,
-    admin: Annotated[Profile, Depends(get_admin_user)],
+    admin: Annotated[CurrentUser, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = (
@@ -429,7 +396,7 @@ def delete_university_event(
 @app.post("/api/extension/sync")
 def extension_sync(
     payload: ExtensionSyncPayload,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
 ):
     print(
         f"[extension/sync] user={current_user.user_id} type={payload.type} "
@@ -441,7 +408,7 @@ def extension_sync(
 @app.post("/api/extension/import-courses")
 def import_courses(
     payload: ImportCoursesPayload,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     # 既存の登録済みコースを (year, quarter, day_of_week, period) → (course, course_date) で取得
@@ -498,7 +465,7 @@ def import_courses(
 @app.post("/api/extension/import-assignments")
 def import_assignments(
     payload: ImportAssignmentsPayload,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     all_existing = db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
@@ -541,7 +508,7 @@ def import_assignments(
 
 @app.get("/api/assignments", response_model=list[AssignmentPublic])
 def get_assignments(
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     return db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
@@ -550,7 +517,7 @@ def get_assignments(
 @app.put("/api/assignments/{assignment_id}/done")
 def mark_assignment_done(
     assignment_id: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     a = db.query(Assignment).filter(
@@ -567,7 +534,7 @@ def mark_assignment_done(
 @app.delete("/api/assignments/{assignment_id}")
 def delete_assignment(
     assignment_id: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     a = db.query(Assignment).filter(
@@ -583,7 +550,7 @@ def delete_assignment(
 
 @app.get("/api/todos", response_model=list[TodoPublic])
 def get_todos(
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     return db.query(Todo).filter(Todo.user_id == current_user.user_id).all()
@@ -592,7 +559,7 @@ def get_todos(
 @app.post("/api/todos", response_model=TodoPublic, status_code=201)
 def create_todo(
     body: CreateTodo,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     todo = Todo(user_id=current_user.user_id, title=body.title)
@@ -606,7 +573,7 @@ def create_todo(
 def update_todo(
     todo_id: str,
     body: UpdateTodo,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     todo = db.query(Todo).filter(
@@ -627,7 +594,7 @@ def update_todo(
 @app.delete("/api/todos/{todo_id}")
 def delete_todo(
     todo_id: str,
-    current_user: Annotated[Profile, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     todo = db.query(Todo).filter(

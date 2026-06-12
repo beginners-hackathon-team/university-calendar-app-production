@@ -37,29 +37,7 @@ export default function App() {
             setLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            // 初回ログイン時はプロフィール作成が完了してからセッションをセットする
-            // （先にセッションをセットすると useMe() が401を受けてログアウトしてしまう）
-            if (event === 'SIGNED_IN' && session) {
-                const check = await fetch('/api/me', {
-                    headers: { Authorization: `Bearer ${session.access_token}` },
-                });
-                if (check.status === 404) {
-                    const displayName =
-                        (session.user.user_metadata?.full_name as string | undefined)
-                        ?? session.user.email?.split('@')[0]
-                        ?? 'ユーザー';
-                    await fetch('/api/profiles', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${session.access_token}`,
-                        },
-                        body: JSON.stringify({ display_name: displayName }),
-                    });
-                }
-            }
-
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
         });
 

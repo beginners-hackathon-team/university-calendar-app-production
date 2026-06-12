@@ -6,20 +6,12 @@ export async function login(email: string, password: string): Promise<void> {
 }
 
 export async function register(email: string, password: string, displayName: string): Promise<void> {
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: displayName } },
+    })
     if (error) throw new Error(error.message)
-
-    if (data.session) {
-        const res = await fetch('/api/profiles', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${data.session.access_token}`,
-            },
-            body: JSON.stringify({ display_name: displayName }),
-        })
-        if (!res.ok) throw new Error('プロフィール作成に失敗しました')
-    }
 }
 
 export async function loginWithGoogle(): Promise<void> {

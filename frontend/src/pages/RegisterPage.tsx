@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { register } from "../api/auth";
 
 export default function RegisterPage() {
@@ -7,7 +6,6 @@ export default function RegisterPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const navigate = useNavigate();
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -15,7 +13,6 @@ export default function RegisterPage() {
 
         try {
             await register(email, password, displayName);
-            navigate('/');
         } catch (err) {
             setError((err as Error).message);
         }
