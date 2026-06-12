@@ -1,11 +1,15 @@
 from fastapi import FastAPI, Response, HTTPException, Depends, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from sqlalchemy.orm import Session
 from typing import Annotated
-from app.models.user import User  # uuid_str
+import jwt
+from jwt import PyJWKClient
+
+from app.models.profile import Profile
 from app.models.course import Course
 from app.models.course_date import CourseDate
 from app.models.enrollment import Enrollment
@@ -13,12 +17,24 @@ from app.models.university_event import University_event
 from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
-from app.schemas.auth import CreateUser, UserPublic
+from app.schemas.auth import CreateProfile, ProfilePublic
 from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
-from app.utils.password import hash_password, verify_password
-from app.utils.token import create_access_token, decode_access_token
+from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
+from app.core.config import settings
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+bearer_scheme = HTTPBearer()
+
+_jwks_client = PyJWKClient(f"{settings.supabase_url}/auth/v1/.well-known/jwks.json")
 
 
 @app.get("/api/health")
@@ -26,82 +42,92 @@ def health():
     return {"status": "ok"}
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
-
-
-def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)
-) -> User:
-    user_id = decode_access_token(token)
-
-    if user_id is None:
+def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]) -> str:
+    """SupabaseのJWTをJWKSで検証し、auth.users.id (sub) を返す。"""
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
+        payload = jwt.decode(
+            credentials.credentials,
+            signing_key.key,
+            algorithms=["ES256", "RS256"],
+            options={"verify_aud": False},
+        )
+        sub: str | None = payload.get("sub")
+        if sub is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        return sub
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = db.query(User).filter(User.id == user_id).one_or_none()
 
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    return user
+def get_current_user(
+    user_id: Annotated[str, Depends(verify_supabase_jwt)],
+    db: Session = Depends(get_db),
+) -> Profile:
+    profile = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Profile not found")
+    return profile
 
 
-def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+def get_admin_user(current_user: Annotated[Profile, Depends(get_current_user)]) -> Profile:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return current_user
 
 
-@app.post("/api/user")
-def create_user(user: CreateUser, db: Session = Depends(get_db)):
-    new_user = User(
-        name=user.name, email=user.email, password_hash=hash_password(user.password)
-    )
-    db.add(new_user)
+@app.post("/api/profiles", status_code=201)
+def create_profile(
+    body: CreateProfile,
+    user_id: Annotated[str, Depends(verify_supabase_jwt)],
+    db: Session = Depends(get_db),
+):
+    existing = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
+    if existing:
+        return existing
+
+    profile = Profile(user_id=user_id, display_name=body.display_name)
+    db.add(profile)
     db.commit()
-    db.refresh(new_user)
-    return new_user
+    db.refresh(profile)
+    return profile
 
 
-@app.get("/api/users", response_model=list[UserPublic])
+@app.get("/api/me")
+def read_me(current_user: Annotated[Profile, Depends(get_current_user)]):
+    return {
+        "id": current_user.user_id,
+        "display_name": current_user.display_name,
+        "is_admin": current_user.is_admin,
+    }
+
+
+@app.get("/api/users", response_model=list[ProfilePublic])
 def get_users(
-    admin: Annotated[User, Depends(get_admin_user)],
+    admin: Annotated[Profile, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
-    return db.query(User).all()
+    return db.query(Profile).all()
 
 
-@app.get("/api/user/{id}", response_model=UserPublic)
-def get_user(
-    id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db),
-):
-    user = db.query(User).filter(User.id == id).one_or_none()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return user
-
-
-@app.delete("/api/user/{id}")
+@app.delete("/api/user/{user_id}")
 def delete_user(
-    id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    user_id: str,
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    if current_user.id != id and not current_user.is_admin:
+    if current_user.user_id != user_id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    user = db.query(User).filter(User.id == id).one_or_none()
-
-    if not user:
+    profile = db.query(Profile).filter(Profile.user_id == user_id).one_or_none()
+    if not profile:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.delete(user)
+    db.delete(profile)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -109,7 +135,7 @@ def delete_user(
 @app.post("/api/course")
 def create_course(
     create_course: CreateCourse,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     course = Course(
@@ -130,7 +156,7 @@ def create_course(
     db.commit()
     db.refresh(course_date)
 
-    enroll = Enrollment(course_id=course.id, user_id=current_user.id)
+    enroll = Enrollment(course_id=course.id, user_id=current_user.user_id)
     db.add(enroll)
     db.commit()
 
@@ -140,14 +166,13 @@ def create_course(
 @app.get("/api/calendar/{year_month}")
 def get_calendar(
     year_month: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    # URL例: /api/calendar/2026-4 （年度-月）
     year, month = map(int, year_month.split("-"))
 
     enrollments = (
-        db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+        db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
     )
     if not enrollments:
         return []
@@ -166,7 +191,9 @@ def get_calendar(
         if not course:
             continue
 
-        # クォーター全体の開催日を生成し、指定月だけ残す
+        if cd.is_intensive_lct:
+            continue
+
         all_dates = build_class_dates(cd.year, cd.quarter, cd.day_of_week)
         filtered_dates = [d for d in all_dates if d.year == year and d.month == month]
         if not filtered_dates:
@@ -189,13 +216,13 @@ def get_calendar(
 @app.delete("/api/course/{course_id}")
 def delete_course(
     course_id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     enrollment = (
         db.query(Enrollment)
         .filter(
-            Enrollment.user_id == current_user.id,
+            Enrollment.user_id == current_user.user_id,
             Enrollment.course_id == course_id,
         )
         .one_or_none()
@@ -204,7 +231,6 @@ def delete_course(
         raise HTTPException(status_code=404, detail="Enrollment not found")
 
     course = db.query(Course).filter(Course.id == course_id).one_or_none()
-
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
@@ -215,14 +241,12 @@ def delete_course(
 
 @app.delete("/api/courses")
 def delete_all_courses(
-    admin: Annotated[User, Depends(get_admin_user)],
+    admin: Annotated[Profile, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     courses = db.query(Course).all()
-
     for course in courses:
         db.delete(course)
-
     db.commit()
     return Response(status_code=204)
 
@@ -230,20 +254,18 @@ def delete_all_courses(
 @app.get("/api/courses/{year_quarter}")
 def get_courses(
     year_quarter: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     year, quarter = map(int, year_quarter.split("-"))
 
     enrollments = (
-        db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+        db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
     )
-
     if not enrollments:
         return []
 
     course_ids = [enrollment.course_id for enrollment in enrollments]
-
     courses = db.query(Course).filter(Course.id.in_(course_ids)).all()
     course_dates = (
         db.query(CourseDate)
@@ -256,7 +278,6 @@ def get_courses(
     )
 
     course_map = {course.id: course for course in courses}
-
     result = []
 
     for course_date in course_dates:
@@ -274,6 +295,8 @@ def get_courses(
                 "quarter": course_date.quarter,
                 "day_of_week": course_date.day_of_week,
                 "period": course_date.period,
+                "lms_course_id": course.lms_course_id,
+                "lms_system_type": course.lms_system_type,
             }
         )
 
@@ -284,18 +307,17 @@ def get_courses(
 def update_course(
     course_id: str,
     update_course: UpdateCourse,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     enrollment = (
         db.query(Enrollment)
         .filter(
-            Enrollment.user_id == current_user.id,
+            Enrollment.user_id == current_user.user_id,
             Enrollment.course_id == course_id,
         )
         .one_or_none()
     )
-
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
 
@@ -321,11 +343,10 @@ def update_course(
 @app.get("/api/university-events/{year}")
 def get_university_events(
     year: int,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[Profile, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
     events = db.query(University_event).filter(University_event.year == year).all()
-
     return [
         {
             "id": e.id,
@@ -338,44 +359,10 @@ def get_university_events(
     ]
 
 
-"""
-ログイン機能
-"""
-
-
-@app.post("/api/login")
-def login(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Session = Depends(get_db),
-):
-    user = db.query(User).filter(User.name == form_data.username).one_or_none()
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = create_access_token(subject=user.id)
-    return {"access_token": token, "token_type": "bearer"}
-
-
-# 自分の情報を返す
-@app.get("/api/me")
-def read_me(current_user: Annotated[User, Depends(get_current_user)]):
-    return {
-        "id": current_user.id,
-        "name": current_user.name,
-        "email": current_user.email,
-        "is_admin": current_user.is_admin,
-    }
-
-
-# 大学イベント追加（管理者のみ）
 @app.post("/api/university-events")
 def create_university_event(
     payload: CreateUniEvent,
-    admin: Annotated[User, Depends(get_admin_user)],
+    admin: Annotated[Profile, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = University_event(
@@ -391,12 +378,11 @@ def create_university_event(
     return event
 
 
-# 大学イベント編集（管理者のみ）
 @app.put("/api/university-events/{uni_event_id}")
 def update_university_event(
     uni_event_id: str,
     update_uni_event: UpdateUniEvent,
-    admin: Annotated[User, Depends(get_admin_user)],
+    admin: Annotated[Profile, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = (
@@ -415,15 +401,13 @@ def update_university_event(
 
     db.commit()
     db.refresh(event)
-
     return event
 
 
-# 大学イベント削除（管理者のみ）
 @app.delete("/api/university-events/{uni_event_id}")
 def delete_university_event(
     uni_event_id: str,
-    admin: Annotated[User, Depends(get_admin_user)],
+    admin: Annotated[Profile, Depends(get_admin_user)],
     db: Session = Depends(get_db),
 ):
     event = (
@@ -439,7 +423,76 @@ def delete_university_event(
     return Response(status_code=204)
 
 
-# 静的ファイル配信（本番のみ。frontendのビルド成果物が static/ にある場合に有効）
+@app.post("/api/extension/sync")
+def extension_sync(
+    payload: ExtensionSyncPayload,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+):
+    print(
+        f"[extension/sync] user={current_user.user_id} type={payload.type} "
+        f"url={payload.url} html_len={len(payload.html)}"
+    )
+    return {"status": "received", "type": payload.type}
+
+
+@app.post("/api/extension/import-courses")
+def import_courses(
+    payload: ImportCoursesPayload,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    # 既存の登録済みコースを (year, quarter, day_of_week, period) → (course, course_date) で取得
+    existing_map: dict[tuple, tuple] = {}
+    enrolled_course_ids = {
+        e.course_id
+        for e in db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
+    }
+    if enrolled_course_ids:
+        for cd in db.query(CourseDate).filter(CourseDate.course_id.in_(enrolled_course_ids)).all():
+            course_obj = db.query(Course).filter(Course.id == cd.course_id).one_or_none()
+            if course_obj:
+                existing_map[(cd.year, cd.quarter, cd.day_of_week, cd.period)] = (course_obj, cd)
+
+    count = 0
+    for item in payload.courses:
+        key = (item.year, item.quarter, item.day_of_week, item.period)
+        if key in existing_map:
+            # 既存コースを上書き
+            existing_course, existing_cd = existing_map[key]
+            existing_course.name = item.name
+            existing_course.room = item.room
+            existing_course.teacher = item.teacher
+            existing_course.lms_course_id = item.lms_course_id
+            existing_course.lms_system_type = item.lms_system_type
+            existing_cd.is_intensive_lct = item.is_intensive_lct
+        else:
+            # 新規追加
+            course = Course(
+                name=item.name,
+                room=item.room,
+                teacher=item.teacher,
+                lms_course_id=item.lms_course_id,
+                lms_system_type=item.lms_system_type,
+            )
+            db.add(course)
+            db.flush()
+            db.add(CourseDate(
+                course_id=course.id,
+                year=item.year,
+                quarter=item.quarter,
+                day_of_week=item.day_of_week,
+                period=item.period,
+                is_intensive_lct=item.is_intensive_lct,
+            ))
+            db.add(Enrollment(course_id=course.id, user_id=current_user.user_id))
+            existing_map[key] = (course, CourseDate())
+        count += 1
+
+    db.commit()
+    return {"status": "ok", "count": count}
+
+
+# 静的ファイル配信（本番のみ）
 STATIC_DIR = Path(__file__).parent.parent / "static"
 if STATIC_DIR.exists():
     app.mount(
@@ -448,7 +501,6 @@ if STATIC_DIR.exists():
         name="assets",
     )
 
-    # SPA fallback: /api 以外のパスは index.html を返し、React Router に任せる
     @app.get("/{full_path:path}")
     def spa_fallback(full_path: str):
         if full_path.startswith("api/"):

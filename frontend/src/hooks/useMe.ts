@@ -3,7 +3,7 @@ import { authFetch } from "../api/client";
 
 export type Me = {
     id: string;
-    name: string;
+    display_name: string;
     email: string;
     is_admin: boolean;
 };

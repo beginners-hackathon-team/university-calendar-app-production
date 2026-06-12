@@ -1,0 +1,21 @@
+{
+  "name": "extension",
+  "version": "1.0.0",
+  "description": "金沢大学ポータルおよびWebClass LMS上のHTMLを取得し、既存バックエンドへ送信するChrome拡張機能を実装する。",
+  "main": "index.js",
+  "scripts": {
+    "build": "BUILD_ENTRY=background vite build && BUILD_ENTRY=content vite build && BUILD_ENTRY=popup vite build && BUILD_ENTRY=appContent vite build && cp manifest.json dist/ && cp src/popup/popup.html dist/",
+    "dev:background": "BUILD_ENTRY=background vite build --watch",
+    "dev:content": "BUILD_ENTRY=content vite build --watch",
+    "dev:popup": "BUILD_ENTRY=popup vite build --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/chrome": "^0.1.43",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}

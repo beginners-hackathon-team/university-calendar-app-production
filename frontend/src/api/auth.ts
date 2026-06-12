@@ -1,44 +1,45 @@
-// ログイン認証関連
+import { supabase } from '../lib/supabase'
 
-const TOKEN_KEY = 'access_token';
-
-export async function login(username: string, password: string): Promise<void> {
-    const body = new URLSearchParams();
-    body.append('username', username)
-    body.append('password', password)
-
-    const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
-    });
-
-    if (!res.ok) throw new Error('ログインに失敗しました');
-
-    const data: { access_token: string; token_type: string} = await res.json()
-    localStorage.setItem(TOKEN_KEY, data.access_token);
+export async function login(email: string, password: string): Promise<void> {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(error.message)
 }
 
-export async function register(name: string, password: string, email: string) {
-    const res = await fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({ name, email, password }),
-    });
-    if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? '登録に失敗しました');
+export async function register(email: string, password: string, displayName: string): Promise<void> {
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) throw new Error(error.message)
+
+    if (data.session) {
+        const res = await fetch('/api/profiles', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${data.session.access_token}`,
+            },
+            body: JSON.stringify({ display_name: displayName }),
+        })
+        if (!res.ok) throw new Error('プロフィール作成に失敗しました')
     }
 }
 
-export function logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
+export async function loginWithGoogle(): Promise<void> {
+    const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/` },
+    })
+    if (error) throw new Error(error.message)
 }
 
-export function getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+export async function logout(): Promise<void> {
+    await supabase.auth.signOut()
 }
 
-export function isAuthenticated(): boolean {
-    return !!getToken()
+export async function getToken(): Promise<string | null> {
+    const { data } = await supabase.auth.getSession()
+    return data.session?.access_token ?? null
+}
+
+export async function isAuthenticated(): Promise<boolean> {
+    const { data } = await supabase.auth.getSession()
+    return !!data.session
 }

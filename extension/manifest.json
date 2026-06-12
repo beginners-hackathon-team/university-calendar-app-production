@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "金沢大学カレンダー同期",
+  "version": "1.0.0",
+  "description": "金沢大学ポータルおよびWebClass LMS上のHTMLを取得し、既存バックエンドへ送信するChrome拡張機能を実装する。",
+  "permissions": ["storage", "tabs"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "https://eduweb.sta.kanazawa-u.ac.jp/*",
+    "https://lms-wc.el.kanazawa-u.ac.jp/*",
+    "http://localhost:8000/*",
+    "http://localhost:5173/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/RegistList.aspx*",
+        "https://lms-wc.el.kanazawa-u.ac.jp/webclass/course.php/*"
+      ],
+      "js": ["content.js"]
+    },
+    {
+      "matches": ["http://localhost:8000/*", "http://localhost:5173/*"],
+      "js": ["appContent.js"]
+    }
+  ]
+}

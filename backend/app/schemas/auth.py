@@ -1,30 +1,13 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
-class CreateUser(BaseModel):
-    name: str
-    password: str
-    email: EmailStr
+class CreateProfile(BaseModel):
+    display_name: str
 
 
-class ReadUser(BaseModel):
-    name: str
-
-
-class LoginRequest(BaseModel):
-    name: str
-    password: str
-
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str
-
-
-class UserPublic(BaseModel):
-    id: str
-    name: str
-    email: EmailStr
+class ProfilePublic(BaseModel):
+    user_id: str
+    display_name: str
     is_admin: bool
 
     class Config:

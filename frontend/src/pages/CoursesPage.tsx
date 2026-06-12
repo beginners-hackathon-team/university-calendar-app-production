@@ -13,6 +13,8 @@ type Course = {
   quarter: number;
   day_of_week: string;
   period: number;
+  lms_course_id: string | null;
+  lms_system_type: string | null;
 };
  
 type CourseInput = {
@@ -33,6 +35,16 @@ export default function CoursesPage() {
     const [editingKey, setEditingKey] = useState<string | null>(null);
     const [tempData, setTempData] = useState<CourseInput>({ name: "", teacher: "", room: "" });
  
+    // returnQuarter パラメータがあれば初期クォーターを設定
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const returnQuarter = params.get('returnQuarter')
+        if (returnQuarter) {
+            setSelectedQuarter(Number(returnQuarter))
+            window.history.replaceState(null, '', window.location.pathname)
+        }
+    }, [])
+
     // データ取得 (年度やクォーターが変わるたびに実行)
     useEffect(() => {
         fetchCourses(selectedYear, selectedQuarter).then((data: Course[]) => {
@@ -83,6 +95,8 @@ export default function CoursesPage() {
                     quarter: selectedQuarter,
                     day_of_week,
                     period,
+                    lms_course_id: existing.lms_course_id,
+                    lms_system_type: existing.lms_system_type,
                 };
                 setCoursesData({ ...coursesData, [editingKey]: updatedCourse });
             } else {
@@ -136,7 +150,7 @@ export default function CoursesPage() {
             <h1 style={{ textAlign: 'center', color: '#333', marginBottom: '10px' }}>時間割</h1>
             
             {/* 年度・クォーター選択セレクター */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '30px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '20px', marginBottom: '30px' }}>
                 <div style={selectorGroupStyle}>
                     <label style={labelStyle}>年度</label>
                     <select
@@ -160,8 +174,16 @@ export default function CoursesPage() {
                         <option value={4}>第4クォーター (Q4)</option>
                     </select>
                 </div>
+                <a
+                    href={`https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/RegistList.aspx?targetTerm=${{ 1: 'Q1', 2: 'Q2', 3: 'Q3', 4: 'Q4' }[selectedQuarter] ?? 'Q1'}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...portalButtonStyle, textDecoration: 'none', display: 'inline-block' }}
+                >
+                    ポータルで開く
+                </a>
             </div>
- 
+
             {/* 時間割テーブル */}
             <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
                 <thead>
@@ -188,7 +210,19 @@ export default function CoursesPage() {
                                     <td key={dayName} style={contentCellStyle}>
                                         {course ? (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#2c3e50', wordBreak: 'break-all' }}>{course.name}</div>
+                                                <div style={{ fontWeight: 'bold', fontSize: '14px', wordBreak: 'break-all' }}>
+                                    {course.lms_course_id ? (
+                                        <a
+                                            href={`https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/?courseId=${course.lms_course_id}&systemType=${course.lms_system_type ?? ''}`}
+                                            target="webclass"
+                                            style={{ color: '#1a56db', textDecoration: 'none' }}
+                                        >
+                                            {course.name}
+                                        </a>
+                                    ) : (
+                                        <span style={{ color: '#2c3e50' }}>{course.name}</span>
+                                    )}
+                                </div>
                                                 <div style={{ fontSize: '11px', color: '#7f8c8d' }}>👤 {course.teacher}</div>
                                                 <div style={{ fontSize: '11px', color: '#e67e22' }}>📍 {course.room}</div>
                                                 <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', marginTop: '8px' }}>
@@ -271,6 +305,8 @@ const editBtnStyle = { padding: '3px 8px', fontSize: '10px', backgroundColor: '#
 const deleteBtnStyle = { padding: '3px 8px', fontSize: '10px', backgroundColor: '#fff', border: '1px solid #ff4d4f', color: '#ff4d4f', borderRadius: '4px', cursor: 'pointer' };
 const addButtonStyle = { padding: '6px 12px', fontSize: '12px', cursor: 'pointer', color: '#aaa', backgroundColor: '#f9f9f9', border: '1px dashed #ccc', borderRadius: '4px' };
  
+const portalButtonStyle = { padding: '8px 16px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' };
+
 const headerCellStyle = { borderBottom: '2px solid #333', borderRight: '1px solid #eee', padding: '12px 5px', textAlign: 'center' as const };
 const timeCellStyle = { borderBottom: '1px solid #eee', borderRight: '2px solid #333', padding: '15px 5px', textAlign: 'center' as const };
 const contentCellStyle = { borderBottom: '1px solid #eee', borderRight: '1px solid #eee', padding: '10px 5px', textAlign: 'center' as const, minHeight: '100px', verticalAlign: 'top' as const };

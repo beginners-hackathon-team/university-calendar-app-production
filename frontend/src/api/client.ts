@@ -1,17 +1,17 @@
-import { getToken, logout } from "./auth";
+import { supabase } from '../lib/supabase'
 
-// 認証付きfetchラッパー
 export async function authFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
-    const token = getToken();
-    const headers = new Headers(init.headers);
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token ?? null
 
-    const res = await fetch(input, {...init, headers});
+    const headers = new Headers(init.headers)
+    if (token) headers.set('Authorization', `Bearer ${token}`)
 
-    // 認証エラーでログアウト画面へ
+    const res = await fetch(input, { ...init, headers })
+
     if (res.status === 401) {
-        logout();
-        window.location.href = '/login';
+        await supabase.auth.signOut()
+        window.location.href = '/login'
     }
-    return res;
+    return res
 }

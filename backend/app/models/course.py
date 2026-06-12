@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String
 from app.utils.uuid import uuid_str
@@ -11,3 +12,5 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String)
     room: Mapped[str] = mapped_column(String)
     teacher: Mapped[str] = mapped_column(String)
+    lms_course_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    lms_system_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)

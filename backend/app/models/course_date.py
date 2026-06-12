@@ -1,5 +1,6 @@
+from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy import String, Integer, Boolean, ForeignKey
 from app.utils.uuid import uuid_str
 from app.db.base import Base
 
@@ -13,5 +14,6 @@ class CourseDate(Base):
     )
     year: Mapped[int] = mapped_column(Integer)
     quarter: Mapped[int] = mapped_column(Integer)
-    day_of_week: Mapped[str] = mapped_column(String)
+    day_of_week: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     period: Mapped[int] = mapped_column(Integer)
+    is_intensive_lct: Mapped[bool] = mapped_column(Boolean, default=False)

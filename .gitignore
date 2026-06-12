@@ -12,6 +12,9 @@ frontend/dist/
 .env
 .env.*
 !.env.example
+.env.local
+
+
 
 # Docker personal overrides
 compose.override.yml
@@ -27,3 +30,17 @@ compose.override.yml
 .claude/*
 
 backend/static/
+
+
+extension/dist
+extension/node_modules
+extension/.vscode
+extension/.DS_Store
+extension/.claude
+extension/.env
+extension/.env.local
+extension/.env.*
+extension/.env.example
+extension/.git
+extension/.github
+extension/html-sample.txt
