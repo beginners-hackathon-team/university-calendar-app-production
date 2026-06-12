@@ -8,6 +8,7 @@ export const LMS_COURSE_BASE = 'https://lms-wc.el.kanazawa-u.ac.jp/webclass/cour
 const backendBase = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? 'http://localhost:8000'
 export const SYNC_ENDPOINT = `${backendBase}/api/extension/sync`
 export const IMPORT_COURSES_ENDPOINT = `${backendBase}/api/extension/import-courses`
+export const IMPORT_ASSIGNMENTS_ENDPOINT = `${backendBase}/api/extension/import-assignments`
 
 export function buildLectureDetailUrl(lctYear: string, lctCd: string): string {
   return `https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/LectureList.aspx?lct_year=${lctYear}&lct_cd=${lctCd}`

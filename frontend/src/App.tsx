@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import Layout from "./Layout";
 import React, { useEffect, useState } from "react";
 import AdminEventsPage from "./pages/AdminEventsPage";
+import TasksPage from "./pages/TasksPage";
 import { useMe } from "./hooks/useMe";
 import RegisterPage from "./pages/RegisterPage";
 import { supabase } from "./lib/supabase";
@@ -37,9 +38,8 @@ export default function App() {
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            setSession(session);
-
-            // OAuth初回ログイン時、プロフィールがなければ自動作成
+            // 初回ログイン時はプロフィール作成が完了してからセッションをセットする
+            // （先にセッションをセットすると useMe() が401を受けてログアウトしてしまう）
             if (event === 'SIGNED_IN' && session) {
                 const check = await fetch('/api/me', {
                     headers: { Authorization: `Bearer ${session.access_token}` },
@@ -59,6 +59,8 @@ export default function App() {
                     });
                 }
             }
+
+            setSession(session);
         });
 
         return () => subscription.unsubscribe();
@@ -72,6 +74,7 @@ export default function App() {
             <Route element={<PrivateRoute session={session} loading={loading}><Layout /></PrivateRoute>}>
                 <Route path="/" element={<CalendarPage />} />
                 <Route path="/courses" element={<CoursesPage />} />
+                <Route path="/tasks" element={<TasksPage />} />
                 <Route path="/admin/events" element={<AdminRoute><AdminEventsPage /></AdminRoute>} />
             </Route>
 

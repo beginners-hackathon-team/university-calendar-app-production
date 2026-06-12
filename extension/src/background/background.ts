@@ -3,13 +3,14 @@ import type {
   FetchUrlResponse,
   PostResponse,
   ImportCoursesResponse,
+  ImportAssignmentsResponse,
   OpenLmsTabResponse,
   OpenPortalTabResponse,
   ReturnToAppResponse,
 } from '../shared/messages'
-import { postToBackend, importCourses } from '../shared/api'
+import { postToBackend, importCourses, importAssignments } from '../shared/api'
 
-type AnyResponse = FetchUrlResponse | PostResponse | ImportCoursesResponse | OpenLmsTabResponse | OpenPortalTabResponse | ReturnToAppResponse
+type AnyResponse = FetchUrlResponse | PostResponse | ImportCoursesResponse | ImportAssignmentsResponse | OpenLmsTabResponse | OpenPortalTabResponse | ReturnToAppResponse
 
 const APP_URL_FALLBACK = 'http://localhost:5173'
 
@@ -32,6 +33,13 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === 'IMPORT_COURSES') {
       importCourses(message.courses)
+        .then(count => sendResponse({ success: true, count }))
+        .catch(err => sendResponse({ success: false, error: String(err) }))
+      return true
+    }
+
+    if (message.type === 'IMPORT_ASSIGNMENTS') {
+      importAssignments(message.assignments)
         .then(count => sendResponse({ success: true, count }))
         .catch(err => sendResponse({ success: false, error: String(err) }))
       return true

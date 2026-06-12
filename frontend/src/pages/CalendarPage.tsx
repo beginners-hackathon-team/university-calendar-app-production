@@ -175,12 +175,12 @@ export default function CalendarPage() {
     <div style={{
       padding: '20px',
       backgroundColor: '#f9fafb',
-      height: 'calc(100vh - 80px',          // minHeight → height（伸びないように固定）
-      boxSizing: 'border-box',  // paddingを高さに含める
-      overflow: 'hidden',       // はみ出したら隠す（=スクロール禁止）
+      height: 'calc(100vh - 80px)',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     }}>
 
-     
+
       <style>{`
         .fc {
           background: white;

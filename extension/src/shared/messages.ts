@@ -1,5 +1,19 @@
 export type SyncType = 'regist-list' | 'lecture-detail' | 'lms-course' | 'my-reports'
 
+export interface ImportAssignmentItem {
+  task_name: string
+  task_contents_id: string
+  course_name: string | null
+  submitted_at: string | null
+  result: string
+  score: string | null
+}
+
+export interface ImportAssignmentsMessage {
+  type: 'IMPORT_ASSIGNMENTS'
+  assignments: ImportAssignmentItem[]
+}
+
 export interface FetchUrlMessage {
   type: 'FETCH_URL'
   url: string
@@ -50,6 +64,7 @@ export type Message =
   | FetchUrlMessage
   | PostToBackendMessage
   | ImportCoursesMessage
+  | ImportAssignmentsMessage
   | OpenLmsTabMessage
   | OpenPortalTabMessage
   | ReturnToAppMessage
@@ -66,6 +81,12 @@ export interface PostResponse {
 }
 
 export interface ImportCoursesResponse {
+  success: boolean
+  count?: number
+  error?: string
+}
+
+export interface ImportAssignmentsResponse {
   success: boolean
   count?: number
   error?: string

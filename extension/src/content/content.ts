@@ -4,23 +4,28 @@ import type {
   FetchUrlMessage,
   PostToBackendMessage,
   ImportCoursesMessage,
+  ImportAssignmentsMessage,
   OpenLmsTabMessage,
   ReturnToAppMessage,
   FetchUrlResponse,
   PostResponse,
   ImportCoursesResponse,
+  ImportAssignmentsResponse,
   ReturnToAppResponse,
   SyncType,
   CourseImportItem,
+  ImportAssignmentItem,
 } from '../shared/messages'
 import { parseRegisteredCourses } from '../parsers/registParser'
 import { parseSyllabusDetail } from '../parsers/syllabusParser'
 import { parseActingList } from '../parsers/actingListParser'
+import { parseMyReports } from '../parsers/myReportsParser'
+import { parseLmsCoursePage } from '../parsers/lmsCourseParser'
 
 const QUARTER_MAP: Record<number, number> = { 11: 1, 12: 2, 21: 3, 22: 4 }
 const DAY_STR_MAP: Record<number, string> = { 1: '月', 2: '火', 3: '水', 4: '木', 5: '金', 6: '土' }
 
-function sendMessage<T>(message: FetchUrlMessage | PostToBackendMessage | ImportCoursesMessage | OpenLmsTabMessage | ReturnToAppMessage): Promise<T> {
+function sendMessage<T>(message: FetchUrlMessage | PostToBackendMessage | ImportCoursesMessage | ImportAssignmentsMessage | OpenLmsTabMessage | ReturnToAppMessage): Promise<T> {
   return new Promise(resolve => chrome.runtime.sendMessage(message, resolve))
 }
 
@@ -34,6 +39,10 @@ function postToBackend(syncType: SyncType, url: string, html: string): Promise<P
 
 function importCourses(courses: CourseImportItem[]): Promise<ImportCoursesResponse> {
   return sendMessage<ImportCoursesResponse>({ type: 'IMPORT_COURSES', courses })
+}
+
+function importAssignments(assignments: ImportAssignmentItem[]): Promise<ImportAssignmentsResponse> {
+  return sendMessage<ImportAssignmentsResponse>({ type: 'IMPORT_ASSIGNMENTS', assignments })
 }
 
 function createButton(label: string, onClick: () => Promise<void>): HTMLButtonElement {
@@ -188,17 +197,40 @@ if (lmsCourseMatch && !currentUrl.includes('/my-reports')) {
   const token = lmsCourseMatch[2]
 
   const btn = createButton('LMS情報を取得', async () => {
-    // 教材ページのHTMLを送信
+    // 教材ページのHTMLからコース名を取得
     const html = document.documentElement.outerHTML
-    const res1 = await postToBackend('lms-course', currentUrl, html)
-    if (!res1.success) throw new Error(res1.error)
+    const courseInfo = parseLmsCoursePage(html)
+    const courseName = courseInfo?.courseName ?? null
 
-    // my-reportsをBackground経由でfetch → 送信
+    // my-reportsをコンテンツスクリプトから直接fetch（Cookieが自動付与される）
     const myReportsUrl = buildMyReportsUrl(courseId, token)
-    const fetchRes = await fetchUrl(myReportsUrl)
-    if (!fetchRes.success || !fetchRes.html) throw new Error(fetchRes.error ?? 'my-reports fetch failed')
-    const res2 = await postToBackend('my-reports', myReportsUrl, fetchRes.html)
-    if (!res2.success) throw new Error(res2.error)
+    const myReportsRes = await fetch(myReportsUrl, { credentials: 'include' })
+    if (!myReportsRes.ok) throw new Error(`my-reports fetch failed: ${myReportsRes.status}`)
+    const myReportsHtml = await myReportsRes.text()
+
+    console.log('[extension] my-reports html length:', myReportsHtml.length)
+
+    const parsed = parseMyReports(myReportsHtml)
+    console.log('[extension] parsed reports:', parsed.length, parsed)
+
+    if (parsed.length === 0) {
+      console.warn('[extension] No reports parsed. The page structure may not match the expected format.')
+      return
+    }
+
+    const assignments: ImportAssignmentItem[] = parsed.map((r, index) => ({
+      task_name: r.taskName,
+      // taskContentsId が空の場合はコース名+インデックスでフォールバック
+      task_contents_id: r.taskContentsId || `${courseId}-${index}`,
+      course_name: courseName,
+      submitted_at: r.submittedAt ?? null,
+      result: r.result,
+      score: r.score ?? null,
+    }))
+
+    const res = await importAssignments(assignments)
+    if (!res.success) throw new Error(res.error)
+    console.log(`[extension] ${res.count} assignments imported`)
   })
   document.body.appendChild(btn)
 }

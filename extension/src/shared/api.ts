@@ -1,5 +1,5 @@
-import { SYNC_ENDPOINT, IMPORT_COURSES_ENDPOINT } from './urls'
-import type { SyncType, CourseImportItem } from './messages'
+import { SYNC_ENDPOINT, IMPORT_COURSES_ENDPOINT, IMPORT_ASSIGNMENTS_ENDPOINT } from './urls'
+import type { SyncType, CourseImportItem, ImportAssignmentItem } from './messages'
 
 export interface SyncPayload {
   type: SyncType
@@ -43,6 +43,21 @@ export async function importCourses(courses: CourseImportItem[]): Promise<number
     body: JSON.stringify({ courses }),
   })
   if (!res.ok) throw new Error(`Import courses failed: ${res.status}`)
+  const data = await res.json() as { count: number }
+  return data.count
+}
+
+export async function importAssignments(assignments: ImportAssignmentItem[]): Promise<number> {
+  const token = await getStoredToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(IMPORT_ASSIGNMENTS_ENDPOINT, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ assignments }),
+  })
+  if (!res.ok) throw new Error(`Import assignments failed: ${res.status}`)
   const data = await res.json() as { count: number }
   return data.count
 }

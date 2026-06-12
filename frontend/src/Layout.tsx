@@ -17,6 +17,7 @@ export default function Layout() {
     const navItems = [
         { to: "/", label: "カレンダー" },
         { to: "/courses", label: "時間割" },
+        { to: "/tasks", label: "タスク" },
     ];
 
     const headerStyle: React.CSSProperties = {

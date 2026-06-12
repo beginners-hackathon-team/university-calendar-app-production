@@ -14,12 +14,15 @@ from app.models.course import Course
 from app.models.course_date import CourseDate
 from app.models.enrollment import Enrollment
 from app.models.university_event import University_event
+from app.models.assignment import Assignment
+from app.models.todo import Todo
 from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
 from app.schemas.auth import CreateProfile, ProfilePublic
 from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
+from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, TodoPublic, CreateTodo, UpdateTodo
 from app.core.config import settings
 
 app = FastAPI()
@@ -490,6 +493,152 @@ def import_courses(
 
     db.commit()
     return {"status": "ok", "count": count}
+
+
+@app.post("/api/extension/import-assignments")
+def import_assignments(
+    payload: ImportAssignmentsPayload,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    all_existing = db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
+    # task_contents_id が空でないものはそれをキーにする
+    by_contents_id = {a.task_contents_id: a for a in all_existing if a.task_contents_id}
+    # 課題名+コース名のペアでもマップ（task_contents_id が空のフォールバック）
+    by_name = {(a.task_name, a.course_name): a for a in all_existing}
+
+    count = 0
+    for item in payload.assignments:
+        existing_a = None
+        if item.task_contents_id and item.task_contents_id in by_contents_id:
+            existing_a = by_contents_id[item.task_contents_id]
+        elif (item.task_name, item.course_name) in by_name:
+            existing_a = by_name[(item.task_name, item.course_name)]
+
+        if existing_a:
+            existing_a.task_name = item.task_name
+            existing_a.course_name = item.course_name
+            existing_a.submitted_at = item.submitted_at
+            existing_a.result = item.result
+            existing_a.score = item.score
+            if item.task_contents_id:
+                existing_a.task_contents_id = item.task_contents_id
+        else:
+            db.add(Assignment(
+                user_id=current_user.user_id,
+                task_name=item.task_name,
+                task_contents_id=item.task_contents_id,
+                course_name=item.course_name,
+                submitted_at=item.submitted_at,
+                result=item.result,
+                score=item.score,
+            ))
+        count += 1
+
+    db.commit()
+    return {"status": "ok", "count": count}
+
+
+@app.get("/api/assignments", response_model=list[AssignmentPublic])
+def get_assignments(
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    return db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
+
+
+@app.put("/api/assignments/{assignment_id}/done")
+def mark_assignment_done(
+    assignment_id: str,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    a = db.query(Assignment).filter(
+        Assignment.id == assignment_id,
+        Assignment.user_id == current_user.user_id,
+    ).one_or_none()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    a.is_done = True
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.delete("/api/assignments/{assignment_id}")
+def delete_assignment(
+    assignment_id: str,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    a = db.query(Assignment).filter(
+        Assignment.id == assignment_id,
+        Assignment.user_id == current_user.user_id,
+    ).one_or_none()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.delete(a)
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.get("/api/todos", response_model=list[TodoPublic])
+def get_todos(
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    return db.query(Todo).filter(Todo.user_id == current_user.user_id).all()
+
+
+@app.post("/api/todos", response_model=TodoPublic, status_code=201)
+def create_todo(
+    body: CreateTodo,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    todo = Todo(user_id=current_user.user_id, title=body.title)
+    db.add(todo)
+    db.commit()
+    db.refresh(todo)
+    return todo
+
+
+@app.put("/api/todos/{todo_id}", response_model=TodoPublic)
+def update_todo(
+    todo_id: str,
+    body: UpdateTodo,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    todo = db.query(Todo).filter(
+        Todo.id == todo_id,
+        Todo.user_id == current_user.user_id,
+    ).one_or_none()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    if body.title is not None:
+        todo.title = body.title
+    if body.is_done is not None:
+        todo.is_done = body.is_done
+    db.commit()
+    db.refresh(todo)
+    return todo
+
+
+@app.delete("/api/todos/{todo_id}")
+def delete_todo(
+    todo_id: str,
+    current_user: Annotated[Profile, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    todo = db.query(Todo).filter(
+        Todo.id == todo_id,
+        Todo.user_id == current_user.user_id,
+    ).one_or_none()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    db.delete(todo)
+    db.commit()
+    return Response(status_code=204)
 
 
 # 静的ファイル配信（本番のみ）

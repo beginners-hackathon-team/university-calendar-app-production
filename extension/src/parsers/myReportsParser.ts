@@ -13,8 +13,12 @@ export function parseMyReports(html: string): ParsedReport[] {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const reports: ParsedReport[] = []
 
-  const table = doc.querySelector('.table-striped')
-  if (!table) return reports
+  // .table-striped を優先して探し、なければ tbody を持つテーブル全般を探す
+  const table = doc.querySelector('.table-striped') ?? doc.querySelector('table tbody')?.closest('table')
+  if (!table) {
+    console.warn('[myReportsParser] No table found. page title:', doc.title)
+    return reports
+  }
 
   table.querySelectorAll('tbody tr').forEach(row => {
     const cells = row.querySelectorAll('td')
