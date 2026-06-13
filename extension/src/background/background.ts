@@ -13,7 +13,7 @@ import { postToBackend, importCourses, importAssignments, importLmsTasks } from 
 
 type AnyResponse = FetchUrlResponse | PostResponse | ImportCoursesResponse | ImportAssignmentsResponse | ImportLmsTasksResponse | OpenLmsTabResponse | OpenPortalTabResponse | ReturnToAppResponse
 
-const APP_URL_FALLBACK = 'http://localhost:5173'
+const APP_URL_FALLBACK = 'https://ku-calendar-app.onrender.com'
 
 chrome.runtime.onMessage.addListener(
   (message: Message, sender, sendResponse: (r: AnyResponse) => void) => {

@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Response, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -794,6 +794,94 @@ def delete_personal_event(
     db.delete(event)
     db.commit()
     return Response(status_code=204)
+
+
+_PRIVACY_POLICY_HTML = """<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>プライバシーポリシー</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:0 auto;padding:2rem 1rem;color:#1f2937;line-height:1.75}
+    h1{font-size:1.75rem;border-bottom:2px solid #e5e7eb;padding-bottom:.75rem}
+    h2{font-size:1.15rem;margin-top:2.5rem;color:#111827}
+    table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.9rem}
+    th,td{border:1px solid #d1d5db;padding:.5rem .75rem;text-align:left;vertical-align:top}
+    th{background:#f3f4f6;font-weight:600}
+    .meta{color:#6b7280;font-size:.9rem;margin-bottom:2rem}
+    ul{padding-left:1.5rem}
+    li{margin:.25rem 0}
+    footer{margin-top:3rem;padding-top:1rem;border-top:1px solid #e5e7eb;font-size:.85rem;color:#9ca3af}
+  </style>
+</head>
+<body>
+  <h1>プライバシーポリシー</h1>
+  <p class="meta"><strong>KU Calendar Chrome拡張機能</strong><br>最終更新日: 2026年6月14日</p>
+
+  <h2>1. 収集する情報</h2>
+  <p>本拡張機能は、以下の情報を収集します。</p>
+  <table>
+    <tr><th>情報の種類</th><th>収集元</th><th>具体的な内容</th></tr>
+    <tr><td>履修科目情報</td><td>金沢大学ポータル（履修登録一覧ページ）</td><td>授業名、担当教員名、曜日・時限、授業コード（lct_cd）、学期・年度</td></tr>
+    <tr><td>教室情報</td><td>金沢大学ポータル（シラバスページ）</td><td>授業の開講教室名</td></tr>
+    <tr><td>LMSシステム情報</td><td>金沢大学ポータル（授業実施一覧ページ）</td><td>LMSコースID、LMSシステム種別</td></tr>
+    <tr><td>課題・試験情報</td><td>WebClass LMS（コースページ）</td><td>コース名、コンテンツ名、種別（レポート・試験等）、公開期間</td></tr>
+    <tr><td>認証トークン</td><td>KU Calendarアプリ（ブラウザのlocalStorage）</td><td>Supabase発行のアクセストークン（JWT）。端末内にのみ保存。</td></tr>
+  </table>
+
+  <h2>2. 収集目的</h2>
+  <ul>
+    <li>履修科目情報・課題情報をKU Calendarに同期し、カレンダー表示を可能にするため</li>
+    <li>APIリクエストの認証を行うため（認証トークン）</li>
+  </ul>
+
+  <h2>3. 送信先</h2>
+  <p>収集した情報は、以下のサーバーに送信されます。</p>
+  <ul>
+    <li><strong>送信先URL</strong>: <code>https://ku-calendar-app.onrender.com</code></li>
+    <li><strong>送信タイミング</strong>: ユーザーが拡張機能のボタン（「履修情報を取得」「全Qを取得」「LMS情報を取得」）を押したときのみ</li>
+    <li><strong>認証トークンの扱い</strong>: 端末内の <code>chrome.storage.local</code> にのみ保存され、外部サーバーには送信されません</li>
+  </ul>
+
+  <h2>4. 保存期間</h2>
+  <table>
+    <tr><th>データ</th><th>保存場所</th><th>保存期間</th></tr>
+    <tr><td>履修科目・課題情報</td><td>アプリサーバーのデータベース</td><td>ユーザーがアカウントを削除するまで</td></tr>
+    <tr><td>認証トークン</td><td>端末の <code>chrome.storage.local</code></td><td>拡張機能をアンインストールするか、アプリからログアウトするまで</td></tr>
+  </table>
+
+  <h2>5. 収集しない情報</h2>
+  <p>本拡張機能は以下の情報を<strong>一切収集しません</strong>。</p>
+  <ul>
+    <li>パスワード・学籍番号・メールアドレス等のログイン資格情報</li>
+    <li>成績・評点・GPA</li>
+    <li>大学ポータル・LMS以外のWebサイトの閲覧履歴</li>
+    <li>個人メッセージ・通知内容</li>
+    <li>上記の収集対象以外のあらゆる個人情報</li>
+  </ul>
+
+  <h2>6. ユーザーによるデータ削除方法</h2>
+  <ul>
+    <li><strong>拡張機能のデータを削除する</strong>: Chromeの設定 → 拡張機能 → 本拡張機能を削除（アンインストール）すると、<code>chrome.storage.local</code> に保存されたトークンが完全に削除されます。</li>
+    <li><strong>アプリサーバー上のデータを削除する</strong>: KU Calendar（<a href="https://ku-calendar-app.onrender.com">https://ku-calendar-app.onrender.com</a>）にログインし、アカウント削除機能を使用してください。</li>
+  </ul>
+
+  <h2>7. 第三者への提供</h2>
+  <p>収集したデータを第三者に販売・提供することはありません。</p>
+
+  <h2>8. お問い合わせ</h2>
+  <p>本プライバシーポリシーに関するご質問は、以下までご連絡ください。<br>
+  Email: <a href="mailto:okajimaryota1231@gmail.com">okajimaryota1231@gmail.com</a></p>
+
+  <footer>本ポリシーは予告なく変更する場合があります。変更後もご利用を続けた場合、変更内容に同意したものとみなします。</footer>
+</body>
+</html>"""
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy_policy():
+    return HTMLResponse(content=_PRIVACY_POLICY_HTML)
 
 
 # 静的ファイル配信（本番のみ）

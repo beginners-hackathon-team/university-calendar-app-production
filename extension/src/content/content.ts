@@ -61,6 +61,29 @@ function formatUnixTs(ts: number): string | null {
 
 const LMS_TASK_KINDS = new Set(['レポート', '試験', '自習', '一問一答'])
 
+const CONSENT_KEY = 'consentGranted'
+const CONSENT_TEXT = 'この拡張機能は、金沢大学ポータルおよびWebClass LMSから履修情報・課題情報を読み取り、KU Calendarのサーバーに送信してカレンダーに同期します。\nパスワード、成績、学籍番号、上記以外のブラウジング履歴は取得しません。\n同意して続行しますか？'
+
+class ConsentDeniedError extends Error {}
+
+function checkConsent(): Promise<boolean> {
+  return new Promise(resolve => {
+    chrome.storage.local.get(CONSENT_KEY, result => {
+      if (result[CONSENT_KEY] === true) { resolve(true); return }
+      const agreed = window.confirm(CONSENT_TEXT)
+      if (agreed) chrome.storage.local.set({ [CONSENT_KEY]: true })
+      resolve(agreed)
+    })
+  })
+}
+
+function withConsent(fn: () => Promise<void>): () => Promise<void> {
+  return async () => {
+    if (!await checkConsent()) throw new ConsentDeniedError()
+    await fn()
+  }
+}
+
 function createButton(label: string, onClick: () => Promise<void>): HTMLButtonElement {
   const btn = document.createElement('button')
   btn.textContent = label
@@ -88,6 +111,11 @@ function createButton(label: string, onClick: () => Promise<void>): HTMLButtonEl
       await onClick()
       btn.textContent = '送信完了!'
     } catch (e) {
+      if (e instanceof ConsentDeniedError) {
+        btn.textContent = original
+        btn.disabled = false
+        return
+      }
       btn.textContent = 'エラー発生'
       console.error('[extension]', e)
     } finally {
@@ -359,7 +387,7 @@ function initOnDomReady() {
         }
       }
 
-      const btn = createButton('履修情報を取得', async () => {
+      const btn = createButton('履修情報を取得', withConsent(async () => {
         const termSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlTerm')
         const yearSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlYear_ddl')
         const livePortalQuarter = termSelect ? parseInt(termSelect.value) : 0
@@ -374,7 +402,7 @@ function initOnDomReady() {
         console.log(`[extension] ${res.count} courses imported`)
 
         await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', quarter: liveAppQuarter })
-      })
+      }))
       document.body.appendChild(btn)
 
       const returnBtn = createButton('アプリに戻る', async () => {
@@ -385,7 +413,7 @@ function initOnDomReady() {
       returnBtn.style.top = '70px'
       document.body.appendChild(returnBtn)
 
-      const allQBtn = createButton('全Qを取得', async () => {
+      const allQBtn = createButton('全Qを取得', withConsent(async () => {
         const termSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlTerm')
         const yearSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlYear_ddl')
         if (!termSelect) throw new Error('[AllQ] Term select not found')
@@ -413,7 +441,7 @@ function initOnDomReady() {
 
         // ページリロードが発生するまで待機（リロードでこの関数は破棄される）
         await new Promise((_, reject) => setTimeout(() => reject(new Error('[AllQ] Quarter switch did not reload page')), 15000))
-      })
+      }))
       allQBtn.style.top = '124px'
       document.body.appendChild(allQBtn)
 
@@ -431,10 +459,10 @@ function initOnDomReady() {
   // ポータルのバグでTop.aspxまたはBlank.aspxに飛んだ場合も同じボタンを表示
   const isBuggyPortalPage = currentUrl.startsWith(PORTAL_TOP_URL) || currentUrl.startsWith(PORTAL_BLANK_URL)
   if (isBuggyPortalPage) {
-    const btn = createButton('履修情報を取得', async () => {
+    const btn = createButton('履修情報を取得', withConsent(async () => {
       sessionStorage.setItem(PENDING_ACTION_KEY, 'import')
       window.location.href = REGIST_LIST_URL
-    })
+    }))
     document.body.appendChild(btn)
 
     const returnBtn = createButton('アプリに戻る', async () => {
@@ -444,10 +472,10 @@ function initOnDomReady() {
     returnBtn.style.top = '70px'
     document.body.appendChild(returnBtn)
 
-    const allQBtn = createButton('全Qを取得', async () => {
+    const allQBtn = createButton('全Qを取得', withConsent(async () => {
       sessionStorage.setItem(PENDING_ACTION_KEY, 'all-q')
       window.location.href = REGIST_LIST_URL
-    })
+    }))
     allQBtn.style.top = '124px'
     document.body.appendChild(allQBtn)
   }
@@ -470,7 +498,7 @@ function initOnDomReady() {
   // LMS教材ページ（my-reportsページは除外）
   const lmsCourseMatch = currentUrl.match(/\/course\.php\/([^/?#]+)\/?\?.*acs_=([^&#]+)/)
   if (lmsCourseMatch && !currentUrl.includes('/my-reports')) {
-    const btn = createButton('LMS情報を取得', async () => {
+    const btn = createButton('LMS情報を取得', withConsent(async () => {
       const html = document.documentElement.outerHTML
       const courseInfo = parseLmsCoursePage(html)
       if (!courseInfo) throw new Error('コース情報が見つかりませんでした')
@@ -492,7 +520,7 @@ function initOnDomReady() {
       const res = await importLmsTasks(tasks)
       if (!res.success) throw new Error(res.error)
       console.log(`[extension] ${res.count} tasks imported`)
-    })
+    }))
     document.body.appendChild(btn)
   }
 }

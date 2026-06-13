@@ -1,22 +1,23 @@
-const tokenInput = document.getElementById('token') as HTMLInputElement
-const saveBtn = document.getElementById('save') as HTMLButtonElement
-const statusEl = document.getElementById('status') as HTMLDivElement
+const APP_URL = import.meta.env.VITE_BACKEND_URL ?? 'https://ku-calendar-app.onrender.com'
+
+const statusBox  = document.getElementById('status-box')  as HTMLDivElement
+const statusText = document.getElementById('status-text') as HTMLSpanElement
+const openAppBtn = document.getElementById('open-app-btn') as HTMLButtonElement
+const hint       = document.getElementById('hint')        as HTMLParagraphElement
 
 chrome.storage.local.get('access_token', result => {
-  const stored = result['access_token'] as string | undefined
-  if (stored) {
-    tokenInput.value = stored
-    statusEl.textContent = '保存済み'
+  const token = result['access_token'] as string | undefined
+  if (token) {
+    statusBox.classList.remove('logged-out')
+    statusBox.classList.add('logged-in')
+    statusText.textContent = 'ログイン済み'
+    hint.textContent = 'ポータルやLMSページで各種ボタンが表示されます。'
+  } else {
+    statusText.textContent = '未ログイン'
+    hint.textContent = 'アプリにログインすると拡張機能が利用できます。'
   }
 })
 
-saveBtn.addEventListener('click', () => {
-  const token = tokenInput.value.trim()
-  if (!token) {
-    statusEl.textContent = 'トークンを入力してください'
-    return
-  }
-  chrome.storage.local.set({ access_token: token }, () => {
-    statusEl.textContent = '保存しました'
-  })
+openAppBtn.addEventListener('click', () => {
+  chrome.tabs.create({ url: APP_URL })
 })
