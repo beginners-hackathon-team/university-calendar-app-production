@@ -17,8 +17,8 @@ export default function Layout() {
     const menuRef = useRef<HTMLDivElement>(null);
 
     const navigate = useNavigate();
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logout();
         navigate('/login');
     };
 

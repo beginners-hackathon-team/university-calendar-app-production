@@ -38,9 +38,13 @@ class CurrentUser:
 
 app = FastAPI()
 
+# settings.cors_origins はカンマ区切り文字列（例: "https://example.com,http://localhost:5173"）
+_cors_origins: list[str] = [
+    o.strip() for o in settings.cors_origins.split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,6 +101,16 @@ def get_admin_user(current_user: Annotated[CurrentUser, Depends(get_current_user
     return current_user
 
 
+def ensure_profile(user_id: str, db: Session) -> Profile:
+    """プロファイルが存在しなければ作成する。todos / enrollments 等の FK 違反を防ぐ。"""
+    profile = db.get(Profile, user_id)
+    if not profile:
+        profile = Profile(user_id=user_id, display_name=None, is_admin=False)
+        db.add(profile)
+        db.flush()
+    return profile
+
+
 class UpdateDisplayName(BaseModel):
     display_name: str
 
@@ -133,6 +147,7 @@ def create_course(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    ensure_profile(current_user.user_id, db)
     course = Course(
         name=create_course.name, room=create_course.room, teacher=create_course.teacher
     )
@@ -437,6 +452,7 @@ def import_courses(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    ensure_profile(current_user.user_id, db)
     # 既存の登録済みコースを (year, quarter, day_of_week, period) → (course, course_date) で取得
     existing_map: dict[tuple, tuple] = {}
     enrolled_course_ids = {
@@ -508,6 +524,7 @@ def import_assignments(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    ensure_profile(current_user.user_id, db)
     all_existing = db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
     # task_contents_id が空でないものはそれをキーにする
     by_contents_id = {a.task_contents_id: a for a in all_existing if a.task_contents_id}
@@ -552,6 +569,7 @@ def import_lms_tasks(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    ensure_profile(current_user.user_id, db)
     all_existing = db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
     by_contents_id = {a.task_contents_id: a for a in all_existing if a.task_contents_id}
     by_course_title = {
@@ -682,6 +700,7 @@ def create_todo(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    ensure_profile(current_user.user_id, db)
     todo = Todo(user_id=current_user.user_id, title=body.title)
     db.add(todo)
     db.commit()
@@ -746,6 +765,7 @@ def create_personal_event(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    ensure_profile(current_user.user_id, db)
     event = PersonalEvent(
         user_id=current_user.user_id,
         title=body.title,

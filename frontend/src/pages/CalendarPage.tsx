@@ -57,21 +57,25 @@ export default function CalendarPage() {
  
   useEffect(() => {
     const fetchAllExternalEvents = async () => {
-      // 1. 祝日データの取得
-      const holidayRes = await fetch('https://holidays-jp.github.io/api/v1/date.json');
-      const holidayData = await holidayRes.json();
-
-      const holidayEvents: EventType[] = Object.keys(holidayData).map(date => ({
-        title: holidayData[date],
-        start: date,
-        allDay: true,
-        editable: false,
-        display: 'block',
-        color: '#ffcccc',
-        textColor: 'red',
-        className: 'is-holiday',
-        id: `holiday-${date}`
-      }));
+      // 1. 祝日データの取得（外部APIが落ちていても他のイベント表示を継続する）
+      let holidayEvents: EventType[] = [];
+      try {
+        const holidayRes = await fetch('https://holidays-jp.github.io/api/v1/date.json');
+        const holidayData = await holidayRes.json();
+        holidayEvents = Object.keys(holidayData).map(date => ({
+          title: holidayData[date],
+          start: date,
+          allDay: true,
+          editable: false,
+          display: 'block',
+          color: '#ffcccc',
+          textColor: 'red',
+          className: 'is-holiday',
+          id: `holiday-${date}`
+        }));
+      } catch {
+        console.warn('祝日データの取得に失敗しました');
+      }
 
       // 2. 大学行事データの取得
       const univRaw = await fetchUniversityEvents(viewYearMonth.year);
@@ -195,10 +199,10 @@ export default function CalendarPage() {
     }
   };
 
-  // 表示のデフォルトを8時に
+  // 表示のデフォルトを8時に（初回マウント時のみ）
   useEffect(() => {
     calendarRef.current?.getApi().scrollToTime('08:00:00');
-  }, [events])
+  }, [])
  
   return (
     <div style={{

@@ -1,21 +1,21 @@
+import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import type { Session } from "@supabase/supabase-js";
+import CalendarPage from "./pages/CalendarPage";
+import CoursesPage from "./pages/CoursesPage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import AdminEventsPage from "./pages/AdminEventsPage";
+import TasksPage from "./pages/TasksPage";
+import Layout from "./Layout";
+import { useMe } from "./hooks/useMe";
+import { supabase } from "./lib/supabase";
 
 export const HOME_PATH_KEY = 'ku-home-path'
 export const DEFAULT_HOME = '/calendar'
 export function getHomePath(): string {
     return localStorage.getItem(HOME_PATH_KEY) ?? DEFAULT_HOME
 }
-import CalendarPage from "./pages/CalendarPage";
-import CoursesPage from "./pages/CoursesPage";
-import LoginPage from "./pages/LoginPage";
-import Layout from "./Layout";
-import React, { useEffect, useState } from "react";
-import AdminEventsPage from "./pages/AdminEventsPage";
-import TasksPage from "./pages/TasksPage";
-import { useMe } from "./hooks/useMe";
-import RegisterPage from "./pages/RegisterPage";
-import { supabase } from "./lib/supabase";
-import type { Session } from "@supabase/supabase-js";
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
     const { isAdmin, loading } = useMe();
