@@ -44,5 +44,8 @@ extension/.env.example
 extension/.git
 extension/.github
 extension/html-sample.txt
+extension/icons
+extension/extension.zip
+
 
 .tmp

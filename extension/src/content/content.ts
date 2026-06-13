@@ -387,7 +387,7 @@ function initOnDomReady() {
         }
       }
 
-      const btn = createButton('履修情報を取得', withConsent(async () => {
+      const btn = createButton('今学期の時間割を登録', withConsent(async () => {
         const termSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlTerm')
         const yearSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlYear_ddl')
         const livePortalQuarter = termSelect ? parseInt(termSelect.value) : 0
@@ -405,15 +405,14 @@ function initOnDomReady() {
       }))
       document.body.appendChild(btn)
 
-      const returnBtn = createButton('アプリに戻る', async () => {
+      const returnBtn = createButton('時間割へ', async () => {
         const termSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlTerm')
         const quarter = termSelect ? (TERM_QUARTER_MAP[termSelect.value] ?? 1) : 1
         await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', quarter })
       })
-      returnBtn.style.top = '70px'
-      document.body.appendChild(returnBtn)
+      returnBtn.style.top = '124px'
 
-      const allQBtn = createButton('全Qを取得', withConsent(async () => {
+      const allQBtn = createButton('全学期の時間割を登録', withConsent(async () => {
         const termSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlTerm')
         const yearSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlYear_ddl')
         if (!termSelect) throw new Error('[AllQ] Term select not found')
@@ -442,8 +441,9 @@ function initOnDomReady() {
         // ページリロードが発生するまで待機（リロードでこの関数は破棄される）
         await new Promise((_, reject) => setTimeout(() => reject(new Error('[AllQ] Quarter switch did not reload page')), 15000))
       }))
-      allQBtn.style.top = '124px'
+      allQBtn.style.top = '70px'
       document.body.appendChild(allQBtn)
+      document.body.appendChild(returnBtn)
 
       // ポータルバグページからのリダイレクト後に保存されたアクションを自動実行
       const pendingAction = sessionStorage.getItem(PENDING_ACTION_KEY)
@@ -459,25 +459,25 @@ function initOnDomReady() {
   // ポータルのバグでTop.aspxまたはBlank.aspxに飛んだ場合も同じボタンを表示
   const isBuggyPortalPage = currentUrl.startsWith(PORTAL_TOP_URL) || currentUrl.startsWith(PORTAL_BLANK_URL)
   if (isBuggyPortalPage) {
-    const btn = createButton('履修情報を取得', withConsent(async () => {
+    const btn = createButton('今学期の時間割を登録', withConsent(async () => {
       sessionStorage.setItem(PENDING_ACTION_KEY, 'import')
       window.location.href = REGIST_LIST_URL
     }))
     document.body.appendChild(btn)
 
-    const returnBtn = createButton('アプリに戻る', async () => {
+    const returnBtn = createButton('時間割へ', async () => {
       sessionStorage.setItem(PENDING_ACTION_KEY, 'return')
       window.location.href = REGIST_LIST_URL
     })
-    returnBtn.style.top = '70px'
-    document.body.appendChild(returnBtn)
+    returnBtn.style.top = '124px'
 
-    const allQBtn = createButton('全Qを取得', withConsent(async () => {
+    const allQBtn = createButton('全学期の時間割を登録', withConsent(async () => {
       sessionStorage.setItem(PENDING_ACTION_KEY, 'all-q')
       window.location.href = REGIST_LIST_URL
     }))
-    allQBtn.style.top = '124px'
+    allQBtn.style.top = '70px'
     document.body.appendChild(allQBtn)
+    document.body.appendChild(returnBtn)
   }
 
   // LMS全コースページ → 「時間割へ」「タスクへ」ボタン
@@ -498,7 +498,7 @@ function initOnDomReady() {
   // LMS教材ページ（my-reportsページは除外）
   const lmsCourseMatch = currentUrl.match(/\/course\.php\/([^/?#]+)\/?\?.*acs_=([^&#]+)/)
   if (lmsCourseMatch && !currentUrl.includes('/my-reports')) {
-    const btn = createButton('LMS情報を取得', withConsent(async () => {
+    const btn = createButton('課題を追加', withConsent(async () => {
       const html = document.documentElement.outerHTML
       const courseInfo = parseLmsCoursePage(html)
       if (!courseInfo) throw new Error('コース情報が見つかりませんでした')
