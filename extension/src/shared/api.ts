@@ -1,5 +1,5 @@
-import { SYNC_ENDPOINT, IMPORT_COURSES_ENDPOINT, IMPORT_ASSIGNMENTS_ENDPOINT } from './urls'
-import type { SyncType, CourseImportItem, ImportAssignmentItem } from './messages'
+import { SYNC_ENDPOINT, IMPORT_COURSES_ENDPOINT, IMPORT_ASSIGNMENTS_ENDPOINT, IMPORT_LMS_TASKS_ENDPOINT } from './urls'
+import type { SyncType, CourseImportItem, ImportAssignmentItem, ImportLmsTaskItem } from './messages'
 
 export interface SyncPayload {
   type: SyncType
@@ -32,7 +32,11 @@ export async function postToBackend(payload: SyncPayload): Promise<void> {
   }
 }
 
-export async function importCourses(courses: CourseImportItem[]): Promise<number> {
+export async function importCourses(
+  courses: CourseImportItem[],
+  syncYear: number,
+  syncQuarters: number[],
+): Promise<number> {
   const token = await getStoredToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -40,7 +44,7 @@ export async function importCourses(courses: CourseImportItem[]): Promise<number
   const res = await fetch(IMPORT_COURSES_ENDPOINT, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ courses }),
+    body: JSON.stringify({ courses, sync_year: syncYear, sync_quarters: syncQuarters }),
   })
   if (!res.ok) throw new Error(`Import courses failed: ${res.status}`)
   const data = await res.json() as { count: number }
@@ -58,6 +62,21 @@ export async function importAssignments(assignments: ImportAssignmentItem[]): Pr
     body: JSON.stringify({ assignments }),
   })
   if (!res.ok) throw new Error(`Import assignments failed: ${res.status}`)
+  const data = await res.json() as { count: number }
+  return data.count
+}
+
+export async function importLmsTasks(tasks: ImportLmsTaskItem[]): Promise<number> {
+  const token = await getStoredToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(IMPORT_LMS_TASKS_ENDPOINT, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tasks }),
+  })
+  if (!res.ok) throw new Error(`Import LMS tasks failed: ${res.status}`)
   const data = await res.json() as { count: number }
   return data.count
 }

@@ -5,4 +5,5 @@ export const periodToTime = [
     { period: 4, start: "14:45", end: "16:15" },
     { period: 5, start: "16:30", end: "18:00" },
     { period: 6, start: "18:15", end: "19:45" },
+    { period: 7, start: "20:00", end: "21:30" },
 ];

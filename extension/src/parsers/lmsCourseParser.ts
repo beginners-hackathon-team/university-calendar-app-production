@@ -1,9 +1,10 @@
 export interface ParsedLmsContent {
   id: string
   name: string
-  kind: string       // "資料" | "レポート" | etc.
+  kind: string       // "資料" | "レポート" | "試験" | "自習" | "一問一答" | etc.
   folderId: string
   folderName: string
+  startDate: number  // unix timestamp (0 = 未設定)
   endDate: number    // unix timestamp (0 = 未設定)
   execCount: number
 }
@@ -37,6 +38,7 @@ export function parseLmsCoursePage(html: string): ParsedLmsCourse | null {
         kind: item.querySelector('.cl-contentsList_categoryLabel')?.textContent?.trim() ?? '',
         folderId,
         folderName,
+        startDate: parseInt(item.getAttribute('data-start-date') ?? '0'),
         endDate: parseInt(item.getAttribute('data-end-date') ?? '0'),
         execCount: parseInt(item.getAttribute('data-exec-count') ?? '0'),
       })

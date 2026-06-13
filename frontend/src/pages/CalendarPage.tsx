@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchCalendar } from '../api/calendar';
 import { periodToTime } from '../periodToTime';
 import { fetchUniversityEvents } from '../api/universityEvents';
+import { fetchPersonalEvents, createPersonalEvent, deletePersonalEvent } from '../api/personalEvents';
  
  
 type EventType = {
@@ -59,7 +60,7 @@ export default function CalendarPage() {
       // 1. 祝日データの取得
       const holidayRes = await fetch('https://holidays-jp.github.io/api/v1/date.json');
       const holidayData = await holidayRes.json();
-     
+
       const holidayEvents: EventType[] = Object.keys(holidayData).map(date => ({
         title: holidayData[date],
         start: date,
@@ -71,7 +72,7 @@ export default function CalendarPage() {
         className: 'is-holiday',
         id: `holiday-${date}`
       }));
- 
+
       // 2. 大学行事データの取得
       const univRaw = await fetchUniversityEvents(viewYearMonth.year);
       const univEvents: EventType[] = univRaw.map((item, index) => {
@@ -90,15 +91,27 @@ export default function CalendarPage() {
           id: `univ-${index}`,
         };
       });
- 
+
+      // 3. 個人予定の取得
+      const personalRaw = await fetchPersonalEvents();
+      const personalEvents: EventType[] = personalRaw.map(e => ({
+        id: `personal-${e.id}`,
+        title: e.title,
+        start: e.start,
+        end: e.end ?? undefined,
+        allDay: e.all_day,
+        color: '#4f46e5',
+        className: 'is-personal',
+      }));
+
       setEvents(prev => {
-        const onlyUserEvents = prev.filter(e =>
-          !e.id?.startsWith('holiday-') && !e.id?.startsWith('univ-')
+        const onlySystemEvents = prev.filter(e =>
+          !e.id?.startsWith('holiday-') && !e.id?.startsWith('univ-') && !e.id?.startsWith('personal-')
         );
-        return [...onlyUserEvents, ...holidayEvents, ...univEvents];
+        return [...onlySystemEvents, ...holidayEvents, ...univEvents, ...personalEvents];
       });
     };
- 
+
     fetchAllExternalEvents();
   }, []);
  
@@ -135,34 +148,50 @@ export default function CalendarPage() {
  
  
   // 予定を追加する処理
-  const handleDateSelect = (selectInfo: DateSelectArg) => {
+  const handleDateSelect = async (selectInfo: DateSelectArg) => {
     const title = prompt('予定のタイトルを入力してください');
     const calendarApi = selectInfo.view.calendar;
     calendarApi.unselect();
- 
-    if (title) {
-      const newEvent = {
-        id: String(Date.now()),
+
+    if (!title) return;
+
+    try {
+      const saved = await createPersonalEvent({
         title,
         start: selectInfo.startStr,
-        end: selectInfo.endStr,
-        allDay: selectInfo.allDay,
-        color: '#4f46e5'
-      };
-      setEvents(prev => [...prev, newEvent]);
+        end: selectInfo.endStr || null,
+        all_day: selectInfo.allDay,
+      });
+      setEvents(prev => [...prev, {
+        id: `personal-${saved.id}`,
+        title: saved.title,
+        start: saved.start,
+        end: saved.end ?? undefined,
+        allDay: saved.all_day,
+        color: '#4f46e5',
+        className: 'is-personal',
+      }]);
+    } catch {
+      alert('予定の追加に失敗しました');
     }
   };
- 
+
   // 予定をクリックして削除する処理
-  const handleEventClick = (clickInfo: EventClickArg) => {
-    const classList = clickInfo.event.extendedProps.className;
-    // 祝日と大学行事は削除不可
-    if (classList === 'is-holiday' || classList === 'is-univ-event') {
+  const handleEventClick = async (clickInfo: EventClickArg) => {
+    const id = clickInfo.event.id;
+    // 祝日・大学行事・授業は削除不可
+    if (id.startsWith('holiday-') || id.startsWith('univ-') || id.startsWith('course-')) {
       return;
     }
- 
-    if (confirm(`予定「${clickInfo.event.title}」を削除しますか？`)) {
-      setEvents(prev => prev.filter(event => event.id !== clickInfo.event.id));
+
+    if (!confirm(`予定「${clickInfo.event.title}」を削除しますか？`)) return;
+
+    const rawId = id.replace('personal-', '');
+    try {
+      await deletePersonalEvent(rawId);
+      setEvents(prev => prev.filter(event => event.id !== id));
+    } catch {
+      alert('予定の削除に失敗しました');
     }
   };
 
@@ -201,10 +230,6 @@ export default function CalendarPage() {
         .fc-day-today { background-color: #fefce8 !important; }
         .fc-event { cursor: pointer; }
       `}</style>
- 
-      <h1 style={{ textAlign: 'center', marginBottom: '20px', color: '#111827', fontSize: '28px', fontWeight: 'bold' }}>
-        カレンダー
-      </h1>
  
       <FullCalendar
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}

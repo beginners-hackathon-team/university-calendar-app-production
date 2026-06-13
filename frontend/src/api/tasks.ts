@@ -8,7 +8,12 @@ export type Assignment = {
   submitted_at: string | null;
   result: string;
   score: string | null;
+  kind: string | null;
+  available_from: string | null;
+  available_until: string | null;
+  lms_course_id: string | null;
   is_done: boolean;
+  done_at: string | null;
   created_at: string;
 };
 
@@ -16,12 +21,19 @@ export type Todo = {
   id: string;
   title: string;
   is_done: boolean;
+  done_at: string | null;
   created_at: string;
 };
 
 export async function fetchAssignments(): Promise<Assignment[]> {
   const res = await authFetch('/api/assignments');
   if (!res.ok) throw new Error('課題の取得に失敗しました');
+  return res.json();
+}
+
+export async function fetchLmsSystemTypes(): Promise<Record<string, string | null>> {
+  const res = await authFetch('/api/lms-system-types');
+  if (!res.ok) return {};
   return res.json();
 }
 

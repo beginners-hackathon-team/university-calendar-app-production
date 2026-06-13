@@ -5,12 +5,8 @@ export async function login(email: string, password: string): Promise<void> {
     if (error) throw new Error(error.message)
 }
 
-export async function register(email: string, password: string, displayName: string): Promise<void> {
-    const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: displayName } },
-    })
+export async function register(email: string, password: string): Promise<void> {
+    const { error } = await supabase.auth.signUp({ email, password })
     if (error) throw new Error(error.message)
 }
 

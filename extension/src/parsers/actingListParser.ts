@@ -15,7 +15,7 @@ export function parseActingList(html: string): LmsLinkInfo | null {
     const searchTarget = source || (href.includes('courseId=') ? href : '') || (onclick.includes('courseId=') ? onclick : '')
     if (!searchTarget) continue
 
-    const match = searchTarget.match(/courseId=([0-9]+)/)
+    const match = searchTarget.match(/courseId=([^&'")]+)/)
     if (!match) continue
 
     const systemTypeMatch = searchTarget.match(/systemType=([^&'")]+)/)

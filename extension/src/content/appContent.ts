@@ -31,8 +31,8 @@ window.addEventListener('storage', e => {
 document.addEventListener('click', e => {
   const target = e.target as HTMLElement
 
-  // LMS リンク
-  const lmsAnchor = target.closest('a[href*="acanthus.cis.kanazawa-u.ac.jp"]') as HTMLAnchorElement | null
+  // LMS リンク（Acanthus SSO または WebClass 直リンク）
+  const lmsAnchor = target.closest('a[href*="acanthus.cis.kanazawa-u.ac.jp"], a[href*="lms-wc.el.kanazawa-u.ac.jp"]') as HTMLAnchorElement | null
   if (lmsAnchor) {
     e.preventDefault()
     e.stopPropagation()

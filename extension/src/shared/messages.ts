@@ -14,6 +14,27 @@ export interface ImportAssignmentsMessage {
   assignments: ImportAssignmentItem[]
 }
 
+export interface ImportLmsTaskItem {
+  lms_contents_id: string
+  title: string
+  kind: string
+  course_name: string | null
+  lms_course_id: string | null
+  available_from: string | null  // "2026/06/29 20:01"
+  available_until: string | null // "2026/07/06 20:00"
+}
+
+export interface ImportLmsTasksMessage {
+  type: 'IMPORT_LMS_TASKS'
+  tasks: ImportLmsTaskItem[]
+}
+
+export interface ImportLmsTasksResponse {
+  success: boolean
+  count?: number
+  error?: string
+}
+
 export interface FetchUrlMessage {
   type: 'FETCH_URL'
   url: string
@@ -42,6 +63,8 @@ export interface CourseImportItem {
 export interface ImportCoursesMessage {
   type: 'IMPORT_COURSES'
   courses: CourseImportItem[]
+  syncYear: number
+  syncQuarters: number[]
 }
 
 export interface OpenLmsTabMessage {
@@ -58,6 +81,7 @@ export interface OpenPortalTabMessage {
 export interface ReturnToAppMessage {
   type: 'RETURN_TO_APP'
   quarter?: number
+  path?: string  // '/tasks' | '/courses' etc.
 }
 
 export type Message =
@@ -65,6 +89,7 @@ export type Message =
   | PostToBackendMessage
   | ImportCoursesMessage
   | ImportAssignmentsMessage
+  | ImportLmsTasksMessage
   | OpenLmsTabMessage
   | OpenPortalTabMessage
   | ReturnToAppMessage

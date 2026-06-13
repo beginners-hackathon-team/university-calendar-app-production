@@ -4,13 +4,14 @@ import type {
   PostResponse,
   ImportCoursesResponse,
   ImportAssignmentsResponse,
+  ImportLmsTasksResponse,
   OpenLmsTabResponse,
   OpenPortalTabResponse,
   ReturnToAppResponse,
 } from '../shared/messages'
-import { postToBackend, importCourses, importAssignments } from '../shared/api'
+import { postToBackend, importCourses, importAssignments, importLmsTasks } from '../shared/api'
 
-type AnyResponse = FetchUrlResponse | PostResponse | ImportCoursesResponse | ImportAssignmentsResponse | OpenLmsTabResponse | OpenPortalTabResponse | ReturnToAppResponse
+type AnyResponse = FetchUrlResponse | PostResponse | ImportCoursesResponse | ImportAssignmentsResponse | ImportLmsTasksResponse | OpenLmsTabResponse | OpenPortalTabResponse | ReturnToAppResponse
 
 const APP_URL_FALLBACK = 'http://localhost:5173'
 
@@ -32,7 +33,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === 'IMPORT_COURSES') {
-      importCourses(message.courses)
+      importCourses(message.courses, message.syncYear, message.syncQuarters)
         .then(count => sendResponse({ success: true, count }))
         .catch(err => sendResponse({ success: false, error: String(err) }))
       return true
@@ -40,6 +41,13 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === 'IMPORT_ASSIGNMENTS') {
       importAssignments(message.assignments)
+        .then(count => sendResponse({ success: true, count }))
+        .catch(err => sendResponse({ success: false, error: String(err) }))
+      return true
+    }
+
+    if (message.type === 'IMPORT_LMS_TASKS') {
+      importLmsTasks(message.tasks)
         .then(count => sendResponse({ success: true, count }))
         .catch(err => sendResponse({ success: false, error: String(err) }))
       return true
@@ -74,9 +82,11 @@ chrome.runtime.onMessage.addListener(
         const savedAppTabId = (result['appTabId'] as number | undefined) ?? null
         const savedAppUrl = (result['appUrl'] as string | undefined) || APP_URL_FALLBACK
 
-        const returnUrl = quarter
-          ? (() => { const u = new URL(savedAppUrl); u.pathname = '/courses'; u.searchParams.set('returnQuarter', String(quarter)); return u.toString() })()
-          : savedAppUrl
+        const returnUrl = message.path
+          ? (() => { const u = new URL(savedAppUrl); u.pathname = message.path!; return u.toString() })()
+          : quarter
+            ? (() => { const u = new URL(savedAppUrl); u.pathname = '/courses'; u.searchParams.set('returnQuarter', String(quarter)); return u.toString() })()
+            : savedAppUrl
 
         const closePortal = () => {
           if (portalTabId !== null) chrome.tabs.remove(portalTabId)
@@ -88,8 +98,7 @@ chrome.runtime.onMessage.addListener(
             if (chrome.runtime.lastError || !tab) {
               chrome.tabs.create({ url: returnUrl })
             } else {
-              chrome.tabs.reload(savedAppTabId)
-              chrome.tabs.update(savedAppTabId, { active: true }, t => {
+              chrome.tabs.update(savedAppTabId, { url: returnUrl, active: true }, t => {
                 if (t?.windowId != null) {
                   chrome.windows.update(t.windowId, { focused: true })
                 }

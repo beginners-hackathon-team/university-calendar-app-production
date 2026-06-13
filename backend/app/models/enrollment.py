@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.utils.uuid import uuid_str
 from app.db.base import Base
 
@@ -11,4 +12,4 @@ class Enrollment(Base):
     course_id: Mapped[str] = mapped_column(
         String, ForeignKey("courses.id", ondelete="CASCADE")
     )
-    user_id: Mapped[str] = mapped_column(String)
+    user_id: Mapped[str] = mapped_column(PGUUID(as_uuid=False))

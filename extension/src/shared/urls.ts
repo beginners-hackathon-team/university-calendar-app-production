@@ -1,4 +1,6 @@
 export const REGIST_LIST_URL = 'https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/RegistList.aspx'
+export const PORTAL_TOP_URL = 'https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Top.aspx'
+export const PORTAL_BLANK_URL = 'https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Blank.aspx'
 
 export function buildRegistListUrl(term: 'Q1' | 'Q2' | 'Q3' | 'Q4'): string {
   return `${REGIST_LIST_URL}?targetTerm=${term}`
@@ -9,6 +11,7 @@ const backendBase = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? 
 export const SYNC_ENDPOINT = `${backendBase}/api/extension/sync`
 export const IMPORT_COURSES_ENDPOINT = `${backendBase}/api/extension/import-courses`
 export const IMPORT_ASSIGNMENTS_ENDPOINT = `${backendBase}/api/extension/import-assignments`
+export const IMPORT_LMS_TASKS_ENDPOINT = `${backendBase}/api/extension/import-lms-tasks`
 
 export function buildLectureDetailUrl(lctYear: string, lctCd: string): string {
   return `https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/LectureList.aspx?lct_year=${lctYear}&lct_cd=${lctCd}`

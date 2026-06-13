@@ -18,7 +18,15 @@ const DAY_MAP: Record<string, number> = {
   Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
 }
 
+const LOTTERY_LOST_KEYWORDS = ['抽選漏れ', '落選', '不許可']
+
 function parseCourseCell(cell: Element): Omit<ParsedCourse, 'dayOfWeek' | 'period' | 'year' | 'quarter'> | null {
+  const cellText = cell.textContent ?? ''
+  if (LOTTERY_LOST_KEYWORDS.some(kw => cellText.includes(kw))) {
+    console.log('[parseRegisteredCourses] skip lottery-lost course:', cellText.replace(/\s+/g, ' ').trim().slice(0, 80))
+    return null
+  }
+
   const lctCdEl = cell.querySelector('[id$="_lblLctCd"]')
   if (!lctCdEl?.textContent?.trim()) return null
 

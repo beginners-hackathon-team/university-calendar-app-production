@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Assignment, Todo } from '../api/tasks';
 import {
   fetchAssignments,
+  fetchLmsSystemTypes,
   markAssignmentDone,
   deleteAssignment,
   fetchTodos,
@@ -12,28 +13,48 @@ import {
 
 type Tab = 'assignment' | 'todo' | 'done';
 
+type DoneItem =
+  | { kind: 'assignment'; data: Assignment }
+  | { kind: 'todo'; data: Todo };
+
 export default function TasksPage() {
   const [tab, setTab] = useState<Tab>('assignment');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [lmsSystemTypes, setLmsSystemTypes] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     fetchAssignments().then(setAssignments).catch(console.error);
     fetchTodos().then(setTodos).catch(console.error);
+    fetchLmsSystemTypes().then(setLmsSystemTypes).catch(console.error);
   }, []);
 
-  const pendingAssignments = assignments.filter(a => !a.is_done);
-  const doneAssignments = assignments.filter(a => a.is_done);
+  const pendingAssignments = assignments
+    .filter(a => !a.is_done)
+    .sort((a, b) => {
+      const ta = a.available_until ? Date.parse(a.available_until.replace(/\//g, '-').replace(' ', 'T')) : Infinity;
+      const tb = b.available_until ? Date.parse(b.available_until.replace(/\//g, '-').replace(' ', 'T')) : Infinity;
+      return ta - tb;
+    });
+
   const pendingTodos = todos.filter(t => !t.is_done);
-  const doneTodos = todos.filter(t => t.is_done);
+
+  const doneItems: DoneItem[] = [
+    ...assignments.filter(a => a.is_done).map(a => ({ kind: 'assignment' as const, data: a })),
+    ...todos.filter(t => t.is_done).map(t => ({ kind: 'todo' as const, data: t })),
+  ].sort((a, b) => {
+    const ta = a.data.done_at ? Date.parse(a.data.done_at) : 0;
+    const tb = b.data.done_at ? Date.parse(b.data.done_at) : 0;
+    return tb - ta;
+  });
 
   const handleMarkAssignmentDone = async (id: string) => {
     await markAssignmentDone(id);
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, is_done: true } : a));
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, is_done: true, done_at: new Date().toISOString() } : a));
   };
 
-  const handleDeleteAssignment = async (id: string) => {
+  const handleHideAssignment = async (id: string) => {
     await deleteAssignment(id);
     setAssignments(prev => prev.filter(a => a.id !== id));
   };
@@ -58,31 +79,16 @@ export default function TasksPage() {
 
   return (
     <div style={pageStyle}>
-      <h1 style={pageTitleStyle}>タスク</h1>
-
       <div style={tabBarStyle}>
-        <button
-          style={tab === 'assignment' ? activeTabStyle : tabStyle}
-          onClick={() => setTab('assignment')}
-        >
+        <button style={tab === 'assignment' ? activeTabStyle : tabStyle} onClick={() => setTab('assignment')}>
           課題
-          {pendingAssignments.length > 0 && (
-            <span style={badgeStyle}>{pendingAssignments.length}</span>
-          )}
+          {pendingAssignments.length > 0 && <span style={badgeStyle}>{pendingAssignments.length}</span>}
         </button>
-        <button
-          style={tab === 'todo' ? activeTabStyle : tabStyle}
-          onClick={() => setTab('todo')}
-        >
+        <button style={tab === 'todo' ? activeTabStyle : tabStyle} onClick={() => setTab('todo')}>
           TODO
-          {pendingTodos.length > 0 && (
-            <span style={badgeStyle}>{pendingTodos.length}</span>
-          )}
+          {pendingTodos.length > 0 && <span style={badgeStyle}>{pendingTodos.length}</span>}
         </button>
-        <button
-          style={tab === 'done' ? activeTabStyle : tabStyle}
-          onClick={() => setTab('done')}
-        >
+        <button style={tab === 'done' ? activeTabStyle : tabStyle} onClick={() => setTab('done')}>
           Done
         </button>
       </div>
@@ -97,11 +103,20 @@ export default function TasksPage() {
             ) : (
               <div style={cardGridStyle}>
                 {pendingAssignments.map(a => (
-                  <AssignmentCard
+                  <TaskCard
                     key={a.id}
-                    assignment={a}
+                    type="assignment"
+                    title={a.task_name}
+                    subtitle={a.course_name ?? undefined}
+                    subtitleHref={a.lms_course_id
+                      ? `https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/?courseId=${a.lms_course_id}&systemType=${lmsSystemTypes[a.lms_course_id] ?? ''}`
+                      : undefined}
+                    badge={a.kind ?? undefined}
+                    deadline={a.available_until ?? undefined}
+                    result={a.result || undefined}
+                    score={a.score ?? undefined}
+                    submittedAt={a.submitted_at ?? undefined}
                     onDone={() => handleMarkAssignmentDone(a.id)}
-                    onDelete={() => handleDeleteAssignment(a.id)}
                   />
                 ))}
               </div>
@@ -125,13 +140,13 @@ export default function TasksPage() {
             {pendingTodos.length === 0 ? (
               <p style={emptyStyle}>TODOはありません</p>
             ) : (
-              <div style={listStyle}>
+              <div style={cardGridStyle}>
                 {pendingTodos.map(t => (
-                  <TodoItem
+                  <TaskCard
                     key={t.id}
-                    todo={t}
-                    onToggle={() => handleToggleTodo(t.id, !t.is_done)}
-                    onDelete={() => handleDeleteTodo(t.id)}
+                    type="todo"
+                    title={t.title}
+                    onDone={() => handleToggleTodo(t.id, true)}
                   />
                 ))}
               </div>
@@ -142,42 +157,41 @@ export default function TasksPage() {
         {/* Doneタブ */}
         {tab === 'done' && (
           <>
-            {doneAssignments.length === 0 && doneTodos.length === 0 ? (
+            <p style={retentionNoteStyle}>Done したアイテムは1週間保持されます。1週間後に自動で消えます。</p>
+            {doneItems.length === 0 ? (
               <p style={emptyStyle}>完了したアイテムはありません</p>
             ) : (
-              <>
-                {doneAssignments.length > 0 && (
-                  <>
-                    <h2 style={sectionTitleStyle}>課題</h2>
-                    <div style={cardGridStyle}>
-                      {doneAssignments.map(a => (
-                        <AssignmentCard
-                          key={a.id}
-                          assignment={a}
-                          done
-                          onDelete={() => handleDeleteAssignment(a.id)}
-                        />
-                      ))}
-                    </div>
-                  </>
+              <div style={cardGridStyle}>
+                {doneItems.map(item =>
+                  item.kind === 'assignment' ? (
+                    <TaskCard
+                      key={item.data.id}
+                      type="assignment"
+                      title={item.data.task_name}
+                      subtitle={item.data.course_name ?? undefined}
+                      subtitleHref={item.data.lms_course_id
+                        ? `https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/?courseId=${item.data.lms_course_id}&systemType=${lmsSystemTypes[item.data.lms_course_id] ?? ''}`
+                        : undefined}
+                      badge={item.data.kind ?? undefined}
+                      deadline={item.data.available_until ?? undefined}
+                      result={item.data.result || undefined}
+                      score={item.data.score ?? undefined}
+                      submittedAt={item.data.submitted_at ?? undefined}
+                      done
+                      onDelete={() => handleHideAssignment(item.data.id)}
+                    />
+                  ) : (
+                    <TaskCard
+                      key={item.data.id}
+                      type="todo"
+                      title={item.data.title}
+                      done
+                      onToggleUndone={() => handleToggleTodo(item.data.id, false)}
+                      onDelete={() => handleDeleteTodo(item.data.id)}
+                    />
+                  )
                 )}
-                {doneTodos.length > 0 && (
-                  <>
-                    <h2 style={sectionTitleStyle}>TODO</h2>
-                    <div style={listStyle}>
-                      {doneTodos.map(t => (
-                        <TodoItem
-                          key={t.id}
-                          todo={t}
-                          done
-                          onToggle={() => handleToggleTodo(t.id, !t.is_done)}
-                          onDelete={() => handleDeleteTodo(t.id)}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
+              </div>
             )}
           </>
         )}
@@ -186,63 +200,89 @@ export default function TasksPage() {
   );
 }
 
-function AssignmentCard({
-  assignment: a,
+function deadlineColor(until: string): React.CSSProperties {
+  const parsed = Date.parse(until.replace(/\//g, '-').replace(' ', 'T'));
+  if (isNaN(parsed)) return { color: '#9ca3af' };
+  const diffDays = (parsed - Date.now()) / (1000 * 60 * 60 * 24);
+  if (diffDays < 0) return { color: '#9ca3af' };
+  if (diffDays < 1) return { color: '#dc2626', fontWeight: 'bold' };
+  if (diffDays < 3) return { color: '#ea580c', fontWeight: 'bold' };
+  if (diffDays < 7) return { color: '#d97706' };
+  return { color: '#6b7280' };
+}
+
+function TaskCard({
+  type,
+  title,
+  subtitle,
+  subtitleHref,
+  badge,
+  deadline,
+  result,
+  score,
+  submittedAt,
   done = false,
   onDone,
+  onToggleUndone,
   onDelete,
 }: {
-  assignment: Assignment;
+  type: 'assignment' | 'todo';
+  title: string;
+  subtitle?: string;
+  subtitleHref?: string;
+  badge?: string;
+  deadline?: string;
+  result?: string;
+  score?: string;
+  submittedAt?: string;
   done?: boolean;
   onDone?: () => void;
-  onDelete: () => void;
+  onToggleUndone?: () => void;
+  onDelete?: () => void;
 }) {
+  const cardBg = type === 'assignment'
+    ? { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }
+    : { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' };
+
   return (
-    <div style={{ ...cardStyle, opacity: done ? 0.6 : 1 }}>
-      {a.course_name && (
-        <div style={courseNameStyle}>{a.course_name}</div>
+    <div style={{ ...cardStyle, ...cardBg, opacity: done ? 0.7 : 1 }}>
+      {(subtitle || badge) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+          {subtitle && (
+            subtitleHref
+              ? <a href={subtitleHref} target="webclass" style={subtitleLinkStyle}>{subtitle}</a>
+              : <div style={subtitleStyle}>{subtitle}</div>
+          )}
+          {badge && <span style={badgeTagStyle}>{badge}</span>}
+        </div>
       )}
-      <div style={taskNameStyle}>{a.task_name}</div>
-      <div style={metaRowStyle}>
-        <span style={resultBadgeStyle(a.result)}>{a.result}</span>
-        {a.score && <span style={scoreStyle}>{a.score}</span>}
+      <div style={{ ...taskNameStyle, textDecoration: done ? 'line-through' : 'none', color: done ? '#9ca3af' : '#111827' }}>
+        {title}
       </div>
-      {a.submitted_at && (
-        <div style={submittedStyle}>提出: {a.submitted_at}</div>
+      {deadline && (
+        <div style={{ ...deadlineStyle, ...deadlineColor(deadline) }}>
+          期限: {deadline}
+        </div>
       )}
+      {(result || score) && (
+        <div style={metaRowStyle}>
+          {result && <span style={resultBadgeStyle(result)}>{result}</span>}
+          {score && <span style={scoreStyle}>{score}</span>}
+        </div>
+      )}
+      {submittedAt && <div style={submittedStyle}>提出: {submittedAt}</div>}
+
       <div style={cardActionsStyle}>
         {!done && onDone && (
           <button onClick={onDone} style={doneButtonStyle}>完了にする</button>
         )}
-        <button onClick={onDelete} style={deleteSmallBtnStyle}>削除</button>
+        {done && onToggleUndone && (
+          <button onClick={onToggleUndone} style={undoneButtonStyle}>戻す</button>
+        )}
+        {done && onDelete && (
+          <button onClick={onDelete} style={deleteSmallBtnStyle}>削除</button>
+        )}
       </div>
-    </div>
-  );
-}
-
-function TodoItem({
-  todo: t,
-  done = false,
-  onToggle,
-  onDelete,
-}: {
-  todo: Todo;
-  done?: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div style={todoItemStyle}>
-      <input
-        type="checkbox"
-        checked={t.is_done}
-        onChange={onToggle}
-        style={{ cursor: 'pointer', marginRight: '10px', width: '16px', height: '16px', flexShrink: 0 }}
-      />
-      <span style={{ flex: 1, textDecoration: done ? 'line-through' : 'none', color: done ? '#9ca3af' : '#111827', fontSize: '15px' }}>
-        {t.title}
-      </span>
-      <button onClick={onDelete} style={deleteSmallBtnStyle}>削除</button>
     </div>
   );
 }
@@ -250,7 +290,7 @@ function TodoItem({
 // --- スタイル ---
 
 const pageStyle: React.CSSProperties = {
-  maxWidth: '800px',
+  maxWidth: '900px',
   margin: '0 auto',
   padding: '32px 24px',
   fontFamily: 'sans-serif',
@@ -308,6 +348,16 @@ const hintStyle: React.CSSProperties = {
   marginBottom: '16px',
 };
 
+const retentionNoteStyle: React.CSSProperties = {
+  fontSize: '13px',
+  color: '#9ca3af',
+  marginBottom: '16px',
+  padding: '10px 14px',
+  backgroundColor: '#f9fafb',
+  borderRadius: '8px',
+  border: '1px solid #e5e7eb',
+};
+
 const emptyStyle: React.CSSProperties = {
   color: '#9ca3af',
   fontSize: '15px',
@@ -322,24 +372,28 @@ const cardGridStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: 'white',
-  border: '1px solid #e5e7eb',
+  border: '1px solid',
   borderRadius: '10px',
   padding: '16px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
 };
 
-const courseNameStyle: React.CSSProperties = {
+const subtitleStyle: React.CSSProperties = {
   fontSize: '12px',
   color: '#6b7280',
-  marginBottom: '6px',
   fontWeight: 'bold',
+};
+
+const subtitleLinkStyle: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#1a56db',
+  fontWeight: 'bold',
+  textDecoration: 'none',
 };
 
 const taskNameStyle: React.CSSProperties = {
   fontSize: '16px',
   fontWeight: 'bold',
-  color: '#111827',
   marginBottom: '10px',
   lineHeight: '1.4',
 };
@@ -363,6 +417,21 @@ const resultBadgeStyle = (result: string): React.CSSProperties => ({
 const scoreStyle: React.CSSProperties = {
   fontSize: '13px',
   color: '#6b7280',
+};
+
+const deadlineStyle: React.CSSProperties = {
+  fontSize: '13px',
+  marginBottom: '8px',
+};
+
+const badgeTagStyle: React.CSSProperties = {
+  fontSize: '11px',
+  padding: '2px 8px',
+  borderRadius: '999px',
+  backgroundColor: '#ede9fe',
+  color: '#5b21b6',
+  fontWeight: 'bold',
+  whiteSpace: 'nowrap',
 };
 
 const submittedStyle: React.CSSProperties = {
@@ -389,6 +458,16 @@ const doneButtonStyle: React.CSSProperties = {
   fontWeight: 'bold',
 };
 
+const undoneButtonStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  backgroundColor: 'white',
+  color: '#6b7280',
+  border: '1px solid #d1d5db',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '13px',
+};
+
 const deleteSmallBtnStyle: React.CSSProperties = {
   padding: '8px 12px',
   backgroundColor: 'white',
@@ -397,12 +476,6 @@ const deleteSmallBtnStyle: React.CSSProperties = {
   borderRadius: '6px',
   cursor: 'pointer',
   fontSize: '13px',
-};
-
-const listStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '10px',
 };
 
 const addTodoStyle: React.CSSProperties = {
@@ -429,22 +502,4 @@ const addBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontSize: '14px',
   fontWeight: 'bold',
-};
-
-const todoItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  padding: '14px 16px',
-  backgroundColor: 'white',
-  border: '1px solid #e5e7eb',
-  borderRadius: '8px',
-  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: '15px',
-  fontWeight: 'bold',
-  color: '#6b7280',
-  marginBottom: '12px',
-  marginTop: '24px',
 };

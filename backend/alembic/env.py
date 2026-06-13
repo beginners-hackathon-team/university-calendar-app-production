@@ -9,7 +9,6 @@ from app.core.config import settings
 from app.db.base import Base
 
 # モデルインポート
-from app.models import user  # noqa: F401 　 テーブルを認識させるため
 from app.models import enrollment  # noqa: F401
 from app.models import course  # noqa: F401
 from app.models import course_date  # noqa: F401

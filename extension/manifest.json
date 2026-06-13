@@ -20,9 +20,12 @@
     {
       "matches": [
         "https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/RegistList.aspx*",
+        "https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Top.aspx*",
+        "https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Blank.aspx*",
         "https://lms-wc.el.kanazawa-u.ac.jp/webclass/course.php/*"
       ],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "run_at": "document_start"
     },
     {
       "matches": ["http://localhost:8000/*", "http://localhost:5173/*"],

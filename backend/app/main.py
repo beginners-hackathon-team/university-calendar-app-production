@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Response, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -16,12 +17,15 @@ from app.models.enrollment import Enrollment
 from app.models.university_event import University_event
 from app.models.assignment import Assignment
 from app.models.todo import Todo
+from app.models.personal_event import PersonalEvent
+from app.models.profile import Profile
 from app.db.session import get_db
 from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
 from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
-from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, TodoPublic, CreateTodo, UpdateTodo
+from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, ImportLmsTasksPayload, TodoPublic, CreateTodo, UpdateTodo, PersonalEventPublic, CreatePersonalEvent
+from pydantic import BaseModel
 from app.core.config import settings
 
 
@@ -93,13 +97,34 @@ def get_admin_user(current_user: Annotated[CurrentUser, Depends(get_current_user
     return current_user
 
 
+class UpdateDisplayName(BaseModel):
+    display_name: str
+
+
 @app.get("/api/me")
-def read_me(current_user: Annotated[CurrentUser, Depends(get_current_user)]):
+def read_me(current_user: Annotated[CurrentUser, Depends(get_current_user)], db: Session = Depends(get_db)):
+    profile = db.get(Profile, current_user.user_id)
     return {
         "id": current_user.user_id,
-        "display_name": current_user.display_name,
+        "display_name": profile.display_name if profile else None,
         "is_admin": current_user.is_admin,
     }
+
+
+@app.patch("/api/me")
+def update_me(
+    body: UpdateDisplayName,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    profile = db.get(Profile, current_user.user_id)
+    if profile:
+        profile.display_name = body.display_name
+    else:
+        profile = Profile(user_id=current_user.user_id, display_name=body.display_name, is_admin=False)
+        db.add(profile)
+    db.commit()
+    return {"display_name": profile.display_name}
 
 
 @app.post("/api/course")
@@ -265,6 +290,7 @@ def get_courses(
                 "quarter": course_date.quarter,
                 "day_of_week": course_date.day_of_week,
                 "period": course_date.period,
+                "is_intensive_lct": course_date.is_intensive_lct,
                 "lms_course_id": course.lms_course_id,
                 "lms_system_type": course.lms_system_type,
             }
@@ -423,9 +449,11 @@ def import_courses(
             if course_obj:
                 existing_map[(cd.year, cd.quarter, cd.day_of_week, cd.period)] = (course_obj, cd)
 
+    incoming_keys: set[tuple] = set()
     count = 0
     for item in payload.courses:
         key = (item.year, item.quarter, item.day_of_week, item.period)
+        incoming_keys.add(key)
         if key in existing_map:
             # 既存コースを上書き
             existing_course, existing_cd = existing_map[key]
@@ -457,6 +485,18 @@ def import_courses(
             db.add(Enrollment(course_id=course.id, user_id=current_user.user_id))
             existing_map[key] = (course, CourseDate())
         count += 1
+
+    # sync スコープ内にあって今回の取得結果に含まれないコースを削除
+    sync_quarters = set(payload.sync_quarters)
+    for key, (course_obj, cd_obj) in list(existing_map.items()):
+        year, quarter, _, _ = key
+        if year == payload.sync_year and quarter in sync_quarters and key not in incoming_keys:
+            db.query(Enrollment).filter(
+                Enrollment.course_id == course_obj.id,
+                Enrollment.user_id == current_user.user_id,
+            ).delete()
+            db.query(CourseDate).filter(CourseDate.id == cd_obj.id).delete()
+            db.query(Course).filter(Course.id == course_obj.id).delete()
 
     db.commit()
     return {"status": "ok", "count": count}
@@ -506,12 +546,83 @@ def import_assignments(
     return {"status": "ok", "count": count}
 
 
+@app.post("/api/extension/import-lms-tasks")
+def import_lms_tasks(
+    payload: ImportLmsTasksPayload,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    all_existing = db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
+    by_contents_id = {a.task_contents_id: a for a in all_existing if a.task_contents_id}
+    by_course_title = {
+        (a.lms_course_id, a.task_name): a
+        for a in all_existing
+        if a.lms_course_id and a.task_name
+    }
+
+    count = 0
+    for item in payload.tasks:
+        existing_a = by_contents_id.get(item.lms_contents_id) if item.lms_contents_id else None
+        if existing_a is None and item.lms_course_id:
+            existing_a = by_course_title.get((item.lms_course_id, item.title))
+        if existing_a:
+            existing_a.task_name = item.title
+            existing_a.kind = item.kind
+            existing_a.course_name = item.course_name
+            existing_a.lms_course_id = item.lms_course_id
+            existing_a.available_from = item.available_from
+            existing_a.available_until = item.available_until
+        else:
+            db.add(Assignment(
+                user_id=current_user.user_id,
+                task_name=item.title,
+                task_contents_id=item.lms_contents_id,
+                course_name=item.course_name,
+                kind=item.kind,
+                lms_course_id=item.lms_course_id,
+                available_from=item.available_from,
+                available_until=item.available_until,
+                result='',
+            ))
+        count += 1
+
+    db.commit()
+    return {"status": "ok", "count": count}
+
+
 @app.get("/api/assignments", response_model=list[AssignmentPublic])
 def get_assignments(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    return db.query(Assignment).filter(Assignment.user_id == current_user.user_id).all()
+    cutoff = datetime.now(timezone.utc) - timedelta(weeks=1)
+    return (
+        db.query(Assignment)
+        .filter(
+            Assignment.user_id == current_user.user_id,
+            Assignment.is_hidden == False,
+            # Done になって1週間経過したものは除外
+            ~((Assignment.is_done == True) & (Assignment.done_at < cutoff)),
+        )
+        .all()
+    )
+
+
+@app.get("/api/lms-system-types")
+def get_lms_system_types(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Course.lms_course_id, Course.lms_system_type)
+        .join(Enrollment, Enrollment.course_id == Course.id)
+        .filter(
+            Enrollment.user_id == current_user.user_id,
+            Course.lms_course_id.isnot(None),
+        )
+        .all()
+    )
+    return {row.lms_course_id: row.lms_system_type for row in rows}
 
 
 @app.put("/api/assignments/{assignment_id}/done")
@@ -527,6 +638,7 @@ def mark_assignment_done(
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
     a.is_done = True
+    a.done_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "ok"}
 
@@ -543,7 +655,7 @@ def delete_assignment(
     ).one_or_none()
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    db.delete(a)
+    a.is_hidden = True
     db.commit()
     return Response(status_code=204)
 
@@ -553,7 +665,15 @@ def get_todos(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    return db.query(Todo).filter(Todo.user_id == current_user.user_id).all()
+    cutoff = datetime.now(timezone.utc) - timedelta(weeks=1)
+    return (
+        db.query(Todo)
+        .filter(
+            Todo.user_id == current_user.user_id,
+            ~((Todo.is_done == True) & (Todo.done_at < cutoff)),
+        )
+        .all()
+    )
 
 
 @app.post("/api/todos", response_model=TodoPublic, status_code=201)
@@ -586,6 +706,10 @@ def update_todo(
         todo.title = body.title
     if body.is_done is not None:
         todo.is_done = body.is_done
+        if body.is_done:
+            todo.done_at = datetime.now(timezone.utc)
+        else:
+            todo.done_at = None
     db.commit()
     db.refresh(todo)
     return todo
@@ -604,6 +728,50 @@ def delete_todo(
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
     db.delete(todo)
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.get("/api/personal-events", response_model=list[PersonalEventPublic])
+def get_personal_events(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    return db.query(PersonalEvent).filter(PersonalEvent.user_id == current_user.user_id).all()
+
+
+@app.post("/api/personal-events", response_model=PersonalEventPublic, status_code=201)
+def create_personal_event(
+    body: CreatePersonalEvent,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    event = PersonalEvent(
+        user_id=current_user.user_id,
+        title=body.title,
+        start=body.start,
+        end=body.end,
+        all_day=body.all_day,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@app.delete("/api/personal-events/{event_id}")
+def delete_personal_event(
+    event_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    event = db.query(PersonalEvent).filter(
+        PersonalEvent.id == event_id,
+        PersonalEvent.user_id == current_user.user_id,
+    ).one_or_none()
+    if not event:
+        raise HTTPException(status_code=404, detail="Personal event not found")
+    db.delete(event)
     db.commit()
     return Response(status_code=204)
 

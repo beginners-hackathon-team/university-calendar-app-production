@@ -23,3 +23,5 @@ class ImportCourseItem(BaseModel):
 
 class ImportCoursesPayload(BaseModel):
     courses: list[ImportCourseItem]
+    sync_year: int
+    sync_quarters: list[int] = Field(min_length=1)
