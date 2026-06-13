@@ -10,6 +10,13 @@ RUN npm ci
 
 COPY frontend/ ./
 
+# Render が --build-arg として渡す環境変数を受け取る
+# VITE_* はビルド時に JS バンドルへ静的に埋め込まれるため、ここで宣言が必要
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
 RUN npm run build
 # → /backend/static/ に出力される
 
