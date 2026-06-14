@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import AdminEventsPage from "./pages/AdminEventsPage";
 import TasksPage from "./pages/TasksPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import Layout from "./Layout";
 import { useMe } from "./hooks/useMe";
 import { supabase } from "./lib/supabase";
@@ -66,6 +67,7 @@ export default function App() {
 
     return (
         <Routes>
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
             <Route path="/login" element={<GuestRoute session={session} loading={loading}><LoginPage /></GuestRoute>} />
             <Route path="/register" element={<GuestRoute session={session} loading={loading}><RegisterPage /></GuestRoute>} />
 
