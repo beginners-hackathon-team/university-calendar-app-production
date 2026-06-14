@@ -9,6 +9,7 @@ class PersonalEventPublic(BaseModel):
     start: str
     end: Optional[str]
     all_day: bool
+    color: Optional[str]
     created_at: datetime
 
     class Config:
@@ -20,6 +21,15 @@ class CreatePersonalEvent(BaseModel):
     start: str
     end: Optional[str] = None
     all_day: bool = False
+    color: Optional[str] = None
+
+
+class UpdatePersonalEvent(BaseModel):
+    title: str
+    start: str
+    end: Optional[str] = None
+    all_day: bool = False
+    color: Optional[str] = None
 
 
 class AssignmentPublic(BaseModel):

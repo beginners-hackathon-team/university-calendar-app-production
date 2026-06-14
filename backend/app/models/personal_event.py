@@ -15,4 +15,5 @@ class PersonalEvent(Base):
     start: Mapped[str] = mapped_column(String, nullable=False)
     end: Mapped[str] = mapped_column(String, nullable=True)
     all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    color: Mapped[str] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

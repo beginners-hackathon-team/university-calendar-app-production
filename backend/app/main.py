@@ -24,7 +24,7 @@ from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
 from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
-from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, ImportLmsTasksPayload, TodoPublic, CreateTodo, UpdateTodo, PersonalEventPublic, CreatePersonalEvent
+from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, ImportLmsTasksPayload, TodoPublic, CreateTodo, UpdateTodo, PersonalEventPublic, CreatePersonalEvent, UpdatePersonalEvent
 from pydantic import BaseModel
 from app.core.config import settings
 
@@ -772,8 +772,32 @@ def create_personal_event(
         start=body.start,
         end=body.end,
         all_day=body.all_day,
+        color=body.color,
     )
     db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@app.put("/api/personal-events/{event_id}", response_model=PersonalEventPublic)
+def update_personal_event(
+    event_id: str,
+    body: UpdatePersonalEvent,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    event = db.query(PersonalEvent).filter(
+        PersonalEvent.id == event_id,
+        PersonalEvent.user_id == current_user.user_id,
+    ).one_or_none()
+    if not event:
+        raise HTTPException(status_code=404, detail="Personal event not found")
+    event.title = body.title
+    event.start = body.start
+    event.end = body.end
+    event.all_day = body.all_day
+    event.color = body.color
     db.commit()
     db.refresh(event)
     return event

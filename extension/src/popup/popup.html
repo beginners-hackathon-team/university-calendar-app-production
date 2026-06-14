@@ -2,76 +2,10 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <style>
-    body {
-      width: 260px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 14px;
-      color: #1f2937;
-    }
-    h3 {
-      margin: 0 0 14px;
-      font-size: 15px;
-      font-weight: bold;
-    }
-    #status-box {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      margin-bottom: 14px;
-      font-size: 13px;
-      font-weight: bold;
-    }
-    #status-box.logged-in {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    #status-box.logged-out {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    #status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .logged-in #status-dot  { background: #10b981; }
-    .logged-out #status-dot { background: #ef4444; }
-    #open-app-btn {
-      display: block;
-      width: 100%;
-      padding: 9px 0;
-      background: #1a56db;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: bold;
-      cursor: pointer;
-      box-sizing: border-box;
-      text-align: center;
-    }
-    #open-app-btn:hover { background: #1648c0; }
-    #hint {
-      margin-top: 10px;
-      font-size: 11px;
-      color: #9ca3af;
-      line-height: 1.5;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-  <h3>アカンサスカレンダー</h3>
-  <div id="status-box" class="logged-out">
-    <span id="status-dot"></span>
-    <span id="status-text">未ログイン</span>
-  </div>
-  <button id="open-app-btn">アプリを開く</button>
-  <p id="hint">アプリにログインすると拡張機能が利用できます。</p>
+  <div id="root"></div>
   <script src="popup.js"></script>
 </body>
 </html>

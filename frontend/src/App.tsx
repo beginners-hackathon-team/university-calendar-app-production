@@ -11,6 +11,20 @@ import Layout from "./Layout";
 import { useMe } from "./hooks/useMe";
 import { supabase } from "./lib/supabase";
 
+function AppLoader() {
+    return (
+        <div style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--c-bg)',
+        }}>
+            <div className="ku-spinner" />
+        </div>
+    );
+}
+
 export const HOME_PATH_KEY = 'ku-home-path'
 export const DEFAULT_HOME = '/calendar'
 export function getHomePath(): string {
@@ -19,17 +33,17 @@ export function getHomePath(): string {
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
     const { isAdmin, loading } = useMe();
-    if (loading) return <p>Loading...</p>;
+    if (loading) return <AppLoader />;
     return isAdmin ? <>{children}</> : <Navigate to={getHomePath()} replace />;
 }
 
 function PrivateRoute({ children, session, loading }: { children: React.ReactNode; session: Session | null; loading: boolean }) {
-    if (loading) return <p>Loading...</p>;
+    if (loading) return <AppLoader />;
     return session ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function GuestRoute({ children, session, loading }: { children: React.ReactNode; session: Session | null; loading: boolean }) {
-    if (loading) return <p>Loading...</p>;
+    if (loading) return <AppLoader />;
     return session ? <Navigate to="/" replace /> : <>{children}</>;
 }
 

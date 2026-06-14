@@ -77,31 +77,75 @@ export default function TasksPage() {
     setTodos(prev => prev.filter(t => t.id !== id));
   };
 
-  return (
-    <div style={pageStyle}>
-      <div style={tabBarStyle}>
-        <button style={tab === 'assignment' ? activeTabStyle : tabStyle} onClick={() => setTab('assignment')}>
-          課題
-          {pendingAssignments.length > 0 && <span style={badgeStyle}>{pendingAssignments.length}</span>}
-        </button>
-        <button style={tab === 'todo' ? activeTabStyle : tabStyle} onClick={() => setTab('todo')}>
-          TODO
-          {pendingTodos.length > 0 && <span style={badgeStyle}>{pendingTodos.length}</span>}
-        </button>
-        <button style={tab === 'done' ? activeTabStyle : tabStyle} onClick={() => setTab('done')}>
-          Done
-        </button>
-      </div>
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'assignment', label: '課題', count: pendingAssignments.length || undefined },
+    { key: 'todo', label: 'TODO', count: pendingTodos.length || undefined },
+    { key: 'done', label: '完了' },
+  ];
 
-      <div style={contentStyle}>
-        {/* 課題タブ */}
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--c-bg)' }}>
+      <div className="mx-auto px-5 py-10" style={{ maxWidth: 900 }}>
+
+        {/* Page header */}
+        <h1
+          className="font-bold text-[23px] mb-7"
+          style={{ color: 'var(--c-text-1)', letterSpacing: '-0.025em' }}
+        >
+          タスク
+        </h1>
+
+        {/* Tab bar — segmented control style */}
+        <div
+          className="flex gap-1 p-1 mb-8 w-fit"
+          style={{ background: '#ECEEF2', borderRadius: 13 }}
+        >
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className="flex items-center gap-2 font-semibold text-[13px] transition-all duration-150"
+              style={{
+                padding: '7px 20px',
+                borderRadius: 10,
+                border: 'none',
+                cursor: 'pointer',
+                background: tab === t.key ? '#fff' : 'transparent',
+                color: tab === t.key ? 'var(--c-text-1)' : 'var(--c-text-3)',
+                boxShadow: tab === t.key ? '0 1px 4px rgba(0,0,0,0.09)' : 'none',
+              }}
+            >
+              {t.label}
+              {t.count !== undefined && (
+                <span
+                  className="text-[11px] font-bold"
+                  style={{
+                    background: 'var(--c-accent)',
+                    color: '#fff',
+                    borderRadius: 999,
+                    padding: '1px 7px',
+                    lineHeight: '18px',
+                    minWidth: 20,
+                    textAlign: 'center',
+                  }}
+                >
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Assignment tab */}
         {tab === 'assignment' && (
-          <>
-            <p style={hintStyle}>拡張機能のLMS情報取得ボタンで課題を同期できます</p>
+          <div>
+            <p className="text-[13px] mb-5" style={{ color: 'var(--c-text-3)' }}>
+              拡張機能の「LMS情報取得」ボタンで課題を同期できます
+            </p>
             {pendingAssignments.length === 0 ? (
-              <p style={emptyStyle}>課題はありません</p>
+              <EmptyState label="現在の課題はありません" />
             ) : (
-              <div style={cardGridStyle}>
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                 {pendingAssignments.map(a => (
                   <TaskCard
                     key={a.id}
@@ -121,26 +165,49 @@ export default function TasksPage() {
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {/* TODOタブ */}
+        {/* TODO tab */}
         {tab === 'todo' && (
-          <>
-            <div style={addTodoStyle}>
+          <div>
+            <div className="flex gap-2 mb-6">
               <input
                 value={newTodoTitle}
                 onChange={e => setNewTodoTitle(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAddTodo()}
-                placeholder="新しいTODOを入力... (Enterで追加)"
-                style={todoInputStyle}
+                placeholder="新しいTODOを入力して Enter"
+                className="ku-input flex-1 text-[14px]"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 'var(--r-input)',
+                  border: '1.5px solid var(--c-border)',
+                  color: 'var(--c-text-1)',
+                  background: '#fff',
+                }}
               />
-              <button onClick={handleAddTodo} style={addBtnStyle}>追加</button>
+              <button
+                onClick={handleAddTodo}
+                className="font-semibold text-[13.5px] text-white"
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: 'var(--c-accent)',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(75,130,245,0.25)',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--c-accent-h)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--c-accent)'; }}
+              >
+                追加
+              </button>
             </div>
             {pendingTodos.length === 0 ? (
-              <p style={emptyStyle}>TODOはありません</p>
+              <EmptyState label="TODOはありません" />
             ) : (
-              <div style={cardGridStyle}>
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                 {pendingTodos.map(t => (
                   <TaskCard
                     key={t.id}
@@ -151,17 +218,26 @@ export default function TasksPage() {
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {/* Doneタブ */}
+        {/* Done tab */}
         {tab === 'done' && (
-          <>
-            <p style={retentionNoteStyle}>Done したアイテムは1週間保持されます。1週間後に自動で消えます。</p>
+          <div>
+            <p
+              className="text-[13px] mb-5 rounded-[10px] px-4 py-2.5"
+              style={{
+                color: 'var(--c-text-3)',
+                background: '#fff',
+                border: '1px solid var(--c-border)',
+              }}
+            >
+              完了アイテムは1週間後に自動削除されます
+            </p>
             {doneItems.length === 0 ? (
-              <p style={emptyStyle}>完了したアイテムはありません</p>
+              <EmptyState label="完了したアイテムはありません" />
             ) : (
-              <div style={cardGridStyle}>
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                 {doneItems.map(item =>
                   item.kind === 'assignment' ? (
                     <TaskCard
@@ -193,22 +269,40 @@ export default function TasksPage() {
                 )}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function deadlineColor(until: string): React.CSSProperties {
+/* ── Sub-components ──────────────────────────────────────── */
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--c-text-3)' }}>
+      <div
+        className="mb-3"
+        style={{ width: 36, height: 36, borderRadius: '50%', background: '#ECEEF2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 3.5v5M8 10.5v1" stroke="#9AA5B4" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      </div>
+      <p className="text-[14px]">{label}</p>
+    </div>
+  );
+}
+
+function deadlineStyle(until: string): { color: string; fontWeight?: 'bold' } {
   const parsed = Date.parse(until.replace(/\//g, '-').replace(' ', 'T'));
-  if (isNaN(parsed)) return { color: '#9ca3af' };
+  if (isNaN(parsed)) return { color: '#9AA5B4' };
   const diffDays = (parsed - Date.now()) / (1000 * 60 * 60 * 24);
-  if (diffDays < 0) return { color: '#9ca3af' };
-  if (diffDays < 1) return { color: '#dc2626', fontWeight: 'bold' };
-  if (diffDays < 3) return { color: '#ea580c', fontWeight: 'bold' };
-  if (diffDays < 7) return { color: '#d97706' };
-  return { color: '#6b7280' };
+  if (diffDays < 0) return { color: '#9AA5B4' };
+  if (diffDays < 1) return { color: '#E53E3E', fontWeight: 'bold' };
+  if (diffDays < 3) return { color: '#DD6B20', fontWeight: 'bold' };
+  if (diffDays < 7) return { color: '#D69E2E' };
+  return { color: '#9AA5B4' };
 }
 
 function TaskCard({
@@ -240,266 +334,152 @@ function TaskCard({
   onToggleUndone?: () => void;
   onDelete?: () => void;
 }) {
-  const cardBg = type === 'assignment'
-    ? { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }
-    : { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' };
-
   return (
-    <div style={{ ...cardStyle, ...cardBg, opacity: done ? 0.7 : 1 }}>
+    <div
+      className="flex flex-col"
+      style={{
+        background: '#fff',
+        border: '1px solid var(--c-border)',
+        borderRadius: 13,
+        padding: '16px 16px 14px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        opacity: done ? 0.65 : 1,
+      }}
+    >
+      {/* Top meta row */}
       {(subtitle || badge) && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+        <div className="flex justify-between items-start gap-2 mb-2">
           {subtitle && (
-            subtitleHref
-              ? <a href={subtitleHref} target="webclass" style={subtitleLinkStyle}>{subtitle}</a>
-              : <div style={subtitleStyle}>{subtitle}</div>
+            subtitleHref ? (
+              <a
+                href={subtitleHref}
+                target="webclass"
+                className="text-[12px] font-semibold hover:underline"
+                style={{ color: 'var(--c-accent)' }}
+              >
+                {subtitle}
+              </a>
+            ) : (
+              <span className="text-[12px] font-semibold" style={{ color: 'var(--c-text-2)' }}>
+                {subtitle}
+              </span>
+            )
           )}
-          {badge && <span style={badgeTagStyle}>{badge}</span>}
+          {badge && (
+            <span
+              className="text-[11px] font-semibold flex-shrink-0"
+              style={{
+                padding: '2px 9px',
+                borderRadius: 999,
+                background: 'var(--c-accent-bg)',
+                color: 'var(--c-accent)',
+              }}
+            >
+              {badge}
+            </span>
+          )}
         </div>
       )}
-      <div style={{ ...taskNameStyle, textDecoration: done ? 'line-through' : 'none', color: done ? '#9ca3af' : '#111827' }}>
+
+      {/* Task name */}
+      <div
+        className="text-[15px] font-bold leading-snug mb-3"
+        style={{
+          color: done ? 'var(--c-text-3)' : 'var(--c-text-1)',
+          textDecoration: done ? 'line-through' : 'none',
+        }}
+      >
         {title}
       </div>
+
+      {/* Deadline */}
       {deadline && (
-        <div style={{ ...deadlineStyle, ...deadlineColor(deadline) }}>
+        <div className="text-[12.5px] mb-2.5 font-medium" style={deadlineStyle(deadline)}>
           期限: {deadline}
         </div>
       )}
+
+      {/* Result / Score */}
       {(result || score) && (
-        <div style={metaRowStyle}>
-          {result && <span style={resultBadgeStyle(result)}>{result}</span>}
-          {score && <span style={scoreStyle}>{score}</span>}
+        <div className="flex items-center gap-2 mb-2">
+          {result && (
+            <span
+              className="text-[12px] font-bold"
+              style={{
+                padding: '2px 10px',
+                borderRadius: 999,
+                background: result === '○' ? '#D1FAE5' : '#FEE2E2',
+                color: result === '○' ? '#065F46' : '#991B1B',
+              }}
+            >
+              {result}
+            </span>
+          )}
+          {score && (
+            <span className="text-[12px]" style={{ color: 'var(--c-text-2)' }}>{score}</span>
+          )}
         </div>
       )}
-      {submittedAt && <div style={submittedStyle}>提出: {submittedAt}</div>}
 
-      <div style={cardActionsStyle}>
+      {/* Submitted at */}
+      {submittedAt && (
+        <div className="text-[11.5px] mb-2" style={{ color: 'var(--c-text-3)' }}>
+          提出: {submittedAt}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2 mt-auto pt-3">
         {!done && onDone && (
-          <button onClick={onDone} style={doneButtonStyle}>完了にする</button>
+          <button
+            onClick={onDone}
+            className="flex-1 font-semibold text-[13px] text-white"
+            style={{
+              padding: '8px 0',
+              borderRadius: 8,
+              border: 'none',
+              background: 'var(--c-accent)',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--c-accent-h)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--c-accent)'; }}
+          >
+            完了にする
+          </button>
         )}
         {done && onToggleUndone && (
-          <button onClick={onToggleUndone} style={undoneButtonStyle}>戻す</button>
+          <button
+            onClick={onToggleUndone}
+            className="text-[13px] font-medium"
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid var(--c-border)',
+              background: '#fff',
+              color: 'var(--c-text-2)',
+              cursor: 'pointer',
+            }}
+          >
+            戻す
+          </button>
         )}
         {done && onDelete && (
-          <button onClick={onDelete} style={deleteSmallBtnStyle}>削除</button>
+          <button
+            onClick={onDelete}
+            className="text-[13px] font-medium"
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #FCA5A5',
+              background: '#fff',
+              color: 'var(--c-danger)',
+              cursor: 'pointer',
+            }}
+          >
+            削除
+          </button>
         )}
       </div>
     </div>
   );
 }
-
-// --- スタイル ---
-
-const pageStyle: React.CSSProperties = {
-  maxWidth: '900px',
-  margin: '0 auto',
-  padding: '32px 24px',
-  fontFamily: 'sans-serif',
-};
-
-const pageTitleStyle: React.CSSProperties = {
-  fontSize: '28px',
-  fontWeight: 'bold',
-  color: '#111827',
-  marginBottom: '24px',
-  textAlign: 'center',
-};
-
-const tabBarStyle: React.CSSProperties = {
-  display: 'flex',
-  borderBottom: '2px solid #e5e7eb',
-  marginBottom: '24px',
-};
-
-const tabStyle: React.CSSProperties = {
-  padding: '12px 24px',
-  border: 'none',
-  background: 'transparent',
-  cursor: 'pointer',
-  fontSize: '15px',
-  color: '#6b7280',
-  borderBottom: '3px solid transparent',
-  marginBottom: '-2px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-};
-
-const activeTabStyle: React.CSSProperties = {
-  ...tabStyle,
-  color: '#4f46e5',
-  borderBottom: '3px solid #4f46e5',
-  fontWeight: 'bold',
-};
-
-const badgeStyle: React.CSSProperties = {
-  backgroundColor: '#ef4444',
-  color: 'white',
-  borderRadius: '999px',
-  fontSize: '11px',
-  padding: '1px 7px',
-  fontWeight: 'bold',
-};
-
-const contentStyle: React.CSSProperties = {};
-
-const hintStyle: React.CSSProperties = {
-  fontSize: '13px',
-  color: '#9ca3af',
-  marginBottom: '16px',
-};
-
-const retentionNoteStyle: React.CSSProperties = {
-  fontSize: '13px',
-  color: '#9ca3af',
-  marginBottom: '16px',
-  padding: '10px 14px',
-  backgroundColor: '#f9fafb',
-  borderRadius: '8px',
-  border: '1px solid #e5e7eb',
-};
-
-const emptyStyle: React.CSSProperties = {
-  color: '#9ca3af',
-  fontSize: '15px',
-  textAlign: 'center',
-  marginTop: '48px',
-};
-
-const cardGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-  gap: '16px',
-};
-
-const cardStyle: React.CSSProperties = {
-  border: '1px solid',
-  borderRadius: '10px',
-  padding: '16px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-};
-
-const subtitleStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#6b7280',
-  fontWeight: 'bold',
-};
-
-const subtitleLinkStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#1a56db',
-  fontWeight: 'bold',
-  textDecoration: 'none',
-};
-
-const taskNameStyle: React.CSSProperties = {
-  fontSize: '16px',
-  fontWeight: 'bold',
-  marginBottom: '10px',
-  lineHeight: '1.4',
-};
-
-const metaRowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  marginBottom: '6px',
-};
-
-const resultBadgeStyle = (result: string): React.CSSProperties => ({
-  fontSize: '12px',
-  fontWeight: 'bold',
-  padding: '2px 10px',
-  borderRadius: '999px',
-  backgroundColor: result === '○' ? '#d1fae5' : '#fee2e2',
-  color: result === '○' ? '#065f46' : '#991b1b',
-});
-
-const scoreStyle: React.CSSProperties = {
-  fontSize: '13px',
-  color: '#6b7280',
-};
-
-const deadlineStyle: React.CSSProperties = {
-  fontSize: '13px',
-  marginBottom: '8px',
-};
-
-const badgeTagStyle: React.CSSProperties = {
-  fontSize: '11px',
-  padding: '2px 8px',
-  borderRadius: '999px',
-  backgroundColor: '#ede9fe',
-  color: '#5b21b6',
-  fontWeight: 'bold',
-  whiteSpace: 'nowrap',
-};
-
-const submittedStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#9ca3af',
-  marginBottom: '10px',
-};
-
-const cardActionsStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '8px',
-  marginTop: '12px',
-};
-
-const doneButtonStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '8px 0',
-  backgroundColor: '#4f46e5',
-  color: 'white',
-  border: 'none',
-  borderRadius: '6px',
-  cursor: 'pointer',
-  fontSize: '13px',
-  fontWeight: 'bold',
-};
-
-const undoneButtonStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  backgroundColor: 'white',
-  color: '#6b7280',
-  border: '1px solid #d1d5db',
-  borderRadius: '6px',
-  cursor: 'pointer',
-  fontSize: '13px',
-};
-
-const deleteSmallBtnStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  backgroundColor: 'white',
-  color: '#ef4444',
-  border: '1px solid #fca5a5',
-  borderRadius: '6px',
-  cursor: 'pointer',
-  fontSize: '13px',
-};
-
-const addTodoStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '8px',
-  marginBottom: '20px',
-};
-
-const todoInputStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '10px 14px',
-  border: '1px solid #d1d5db',
-  borderRadius: '8px',
-  fontSize: '14px',
-  outline: 'none',
-};
-
-const addBtnStyle: React.CSSProperties = {
-  padding: '10px 20px',
-  backgroundColor: '#4f46e5',
-  color: 'white',
-  border: 'none',
-  borderRadius: '8px',
-  cursor: 'pointer',
-  fontSize: '14px',
-  fontWeight: 'bold',
-};

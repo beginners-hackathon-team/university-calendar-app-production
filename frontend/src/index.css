@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans JP", -apple-system, "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
+  --color-accent: #4b82f5;
+  --color-accent-hover: #3a70e2;
+  --color-accent-light: #eef3fe;
+}
+
+:root {
+  --c-bg: #F7F8FA;
+  --c-surface: #FFFFFF;
+  --c-border: #E8EBF0;
+  --c-border-hover: #CDD3DC;
+  --c-text-1: #0F1117;
+  --c-text-2: #4A5568;
+  --c-text-3: #9AA5B4;
+  --c-accent: #4B82F5;
+  --c-accent-h: #3A70E2;
+  --c-accent-bg: #EEF3FE;
+  --c-danger: #E53E3E;
+  --r-card: 16px;
+  --r-btn: 10px;
+  --r-input: 11px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.005em;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text-1);
+}
+
+/* Shared input focus ring */
+.ku-input:focus {
+  outline: none;
+  border-color: var(--c-accent) !important;
+  box-shadow: 0 0 0 3px rgba(75, 130, 245, 0.14);
+}
+
+/* Portal CTA button */
+.ku-portal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--c-accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 8px 18px;
+  border-radius: 10px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 6px rgba(75,130,245,0.28), 0 0 0 0.5px rgba(75,130,245,0.18);
+  transition: background 0.12s, box-shadow 0.12s, transform 0.1s;
+  text-decoration: none;
+}
+.ku-portal-btn:hover {
+  background: var(--c-accent-h);
+  box-shadow: 0 3px 12px rgba(75,130,245,0.35), 0 0 0 0.5px rgba(75,130,245,0.22);
+  transform: translateY(-1px);
+}
+.ku-portal-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(75,130,245,0.20);
+}
+
+/* Page loading spinner */
+@keyframes ku-spin {
+  to { transform: rotate(360deg); }
+}
+.ku-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--c-border);
+  border-top-color: var(--c-accent);
+  border-radius: 50%;
+  animation: ku-spin 0.7s linear infinite;
+}
