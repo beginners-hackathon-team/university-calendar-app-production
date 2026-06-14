@@ -7,13 +7,10 @@ export default function AuthCallbackPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.auth.exchangeCodeForSession(window.location.href).then(({ error }) => {
-      if (error) {
-        console.error("OAuth callback error:", error.message);
-        navigate("/login", { replace: true });
-      } else {
-        navigate(getHomePath(), { replace: true });
-      }
+    // Supabase automatically exchanges the PKCE code on initialization (detectSessionInUrl: true).
+    // getSession() awaits initializePromise, so it resolves after the exchange completes.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      navigate(session ? getHomePath() : "/login", { replace: true });
     });
   }, [navigate]);
 
