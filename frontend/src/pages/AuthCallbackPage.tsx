@@ -20,10 +20,24 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-      console.log("[AuthCallback] getSession:", session?.user?.email ?? null, "error:", sessionError?.message ?? null);
-      navigate(session ? getHomePath() : "/login", { replace: true });
-    });
+    if (code) {
+      // PKCE flow: authorization code を session に交換する
+      supabase.auth.exchangeCodeForSession(window.location.href).then(({ data, error: exchangeError }) => {
+        console.log("[AuthCallback] exchangeCodeForSession:", data.session?.user?.email ?? null, "error:", exchangeError?.message ?? null);
+        if (exchangeError || !data.session) {
+          console.error("[AuthCallback] exchangeCodeForSession failed:", exchangeError?.message);
+          navigate("/login", { replace: true });
+        } else {
+          navigate(getHomePath(), { replace: true });
+        }
+      });
+    } else {
+      // code なし: すでにセッションがあるか確認（implicit flow など）
+      supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+        console.log("[AuthCallback] getSession:", session?.user?.email ?? null, "error:", sessionError?.message ?? null);
+        navigate(session ? getHomePath() : "/login", { replace: true });
+      });
+    }
   }, [navigate]);
 
   return (
