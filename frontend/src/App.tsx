@@ -54,11 +54,13 @@ export default function App() {
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
+            console.log("[App] getSession result:", data.session?.user?.email ?? null);
             setSession(data.session);
             setLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log("[App] onAuthStateChange:", event, session?.user?.email ?? null);
             setSession(session);
         });
 
