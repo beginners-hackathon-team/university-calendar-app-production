@@ -84,9 +84,7 @@ chrome.runtime.onMessage.addListener(
 
         const returnUrl = message.path
           ? (() => { const u = new URL(savedAppUrl); u.pathname = message.path!; return u.toString() })()
-          : quarter
-            ? (() => { const u = new URL(savedAppUrl); u.pathname = '/courses'; u.searchParams.set('returnQuarter', String(quarter)); return u.toString() })()
-            : savedAppUrl
+          : (() => { const u = new URL(savedAppUrl); u.pathname = '/courses'; return u.toString() })()
 
         const closePortal = () => {
           if (portalTabId !== null) chrome.tabs.remove(portalTabId)

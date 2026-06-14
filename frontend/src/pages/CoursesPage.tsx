@@ -46,17 +46,8 @@ export default function CoursesPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const returnQuarter = params.get('returnQuarter');
-    if (returnQuarter) {
-      sessionStorage.setItem('coursesReturnQuarter', returnQuarter);
+    if (params.has('returnQuarter')) {
       window.history.replaceState(null, '', window.location.pathname);
-      window.location.reload();
-      return;
-    }
-    const savedQuarter = sessionStorage.getItem('coursesReturnQuarter');
-    if (savedQuarter) {
-      sessionStorage.removeItem('coursesReturnQuarter');
-      setSelectedQuarter(Number(savedQuarter));
     }
   }, []);
 
