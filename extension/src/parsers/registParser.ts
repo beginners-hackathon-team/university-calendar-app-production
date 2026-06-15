@@ -20,33 +20,66 @@ const DAY_MAP: Record<string, number> = {
 
 const LOTTERY_LOST_KEYWORDS = ['抽選漏れ', '落選', '不許可']
 
-function parseCourseCell(cell: Element): Omit<ParsedCourse, 'dayOfWeek' | 'period' | 'year' | 'quarter'> | null {
-  const cellText = cell.textContent ?? ''
-  if (LOTTERY_LOST_KEYWORDS.some(kw => cellText.includes(kw))) {
-    console.log('[parseRegisteredCourses] skip lottery-lost course:', cellText.replace(/\s+/g, ' ').trim().slice(0, 80))
-    return null
+// lctCdEl から staffNameEl への最小共通祖先を返す（= その授業ブロック）
+// root まで到達しても見つからなければ root を返す
+function findCourseBlock(lctCdEl: Element, staffNameEl: Element | null, root: Element): Element {
+  if (!staffNameEl) return lctCdEl.parentElement ?? root
+  let el: Element | null = lctCdEl.parentElement
+  while (el && el !== root) {
+    if (el.contains(staffNameEl)) return el
+    el = el.parentElement
+  }
+  return root
+}
+
+function parseCoursesFromCell(
+  cell: Element,
+  dayOfWeek: number,
+  period: number,
+  year: number,
+  quarter: number,
+): ParsedCourse[] {
+  const lctCdEls = Array.from(cell.querySelectorAll<Element>('[id$="_lblLctCd"]'))
+  if (lctCdEls.length === 0) return []
+
+  const results: ParsedCourse[] = []
+
+  for (const lctCdEl of lctCdEls) {
+    if (!lctCdEl.textContent?.trim()) continue
+
+    // IDプレフィックスで同一授業の他要素を特定
+    const prefix = lctCdEl.id.replace(/_lblLctCd$/, '')
+    const staffNameEl = cell.querySelector<Element>(`[id="${prefix}_lblStaffName"]`)
+    const staffLink = staffNameEl?.querySelector<HTMLAnchorElement>('a') ?? null
+
+    // この授業だけのブロック（最小共通祖先）で抽選漏れを判定
+    const courseBlock = findCourseBlock(lctCdEl, staffNameEl, cell)
+    if (LOTTERY_LOST_KEYWORDS.some(kw => (courseBlock.textContent ?? '').includes(kw))) {
+      console.log('[parseRegisteredCourses] skip lottery-lost:', lctCdEl.textContent.trim())
+      continue
+    }
+
+    const href = staffLink?.getAttribute('href') ?? ''
+    const parts = (staffLink?.innerHTML ?? '').split(/<br\s*\/?>/i)
+    const name = parts[0]?.trim() ?? ''
+    const teacher = (parts[1] ?? '').replace(/[()（）]/g, '').trim()
+
+    if (!name) continue
+
+    const lctCd = href.match(/lct_cd=([^&]+)/)?.[1] ?? lctCdEl.textContent.trim()
+    const lctYear = href.match(/lct_year=(\d+)/)?.[1] ?? ''
+    const lctTerm = href.match(/lct_term=([^&]+)/)?.[1] ?? ''
+    const dashIdx = lctCd.indexOf('-')
+    const facCd = dashIdx >= 0 ? lctCd.slice(0, dashIdx) : ''
+    const courseCode = dashIdx >= 0 ? lctCd.slice(dashIdx + 1) : lctCd
+
+    const credits = cell.querySelector(`[id="${prefix}_lblCredit"]`)?.textContent?.trim() ?? ''
+    const sbjDiv = cell.querySelector(`[id="${prefix}_lblSbjDivName"]`)?.textContent?.trim() ?? ''
+
+    results.push({ lctCd, lctYear, lctTerm, facCd, courseCode, name, teacher, credits, sbjDiv, dayOfWeek, period, year, quarter })
   }
 
-  const lctCdEl = cell.querySelector('[id$="_lblLctCd"]')
-  if (!lctCdEl?.textContent?.trim()) return null
-
-  const staffLink = cell.querySelector('[id$="_lblStaffName"] a') as HTMLAnchorElement | null
-  const parts = (staffLink?.innerHTML ?? '').split(/<br\s*\/?>/i)
-  const name = parts[0]?.trim() ?? ''
-  const teacher = (parts[1] ?? '').replace(/[()（）]/g, '').trim()
-
-  const href = staffLink?.getAttribute('href') ?? ''
-  const lctCd = href.match(/lct_cd=([^&]+)/)?.[1] ?? lctCdEl.textContent.trim()
-  const lctYear = href.match(/lct_year=(\d+)/)?.[1] ?? ''
-  const lctTerm = href.match(/lct_term=([^&]+)/)?.[1] ?? ''
-  const dashIdx = lctCd.indexOf('-')
-  const facCd = dashIdx >= 0 ? lctCd.slice(0, dashIdx) : ''
-  const courseCode = dashIdx >= 0 ? lctCd.slice(dashIdx + 1) : lctCd
-
-  const credits = cell.querySelector('[id$="_lblCredit"]')?.textContent?.trim() ?? ''
-  const sbjDiv = cell.querySelector('[id$="_lblSbjDivName"]')?.textContent?.trim() ?? ''
-
-  return { lctCd, lctYear, lctTerm, facCd, courseCode, name, teacher, credits, sbjDiv }
+  return results
 }
 
 export function parseRegisteredCourses(html: string): ParsedCourse[] {
@@ -62,20 +95,21 @@ export function parseRegisteredCourses(html: string): ParsedCourse[] {
       ?.getAttribute('value') ?? '0'
   )
 
+  // 通常コマ（月〜土、1〜8限）
   for (let period = 1; period <= 8; period++) {
     for (const [dayKey, dayNum] of Object.entries(DAY_MAP)) {
       const cell = doc.getElementById(`ctl00_phContents_rrMain_ttTable_td${dayKey}${period}`)
       if (!cell) continue
-      const parsed = parseCourseCell(cell)
-      if (parsed) courses.push({ ...parsed, dayOfWeek: dayNum, period, year, quarter })
+      courses.push(...parseCoursesFromCell(cell, dayNum, period, year, quarter))
     }
   }
 
-  for (let i = 1; i <= 30; i++) {
-    const cell = doc.getElementById(`ctl00_phContents_rrMain_ttTable_tdOth${i}`)
-    if (!cell) continue
-    const parsed = parseCourseCell(cell)
-    if (parsed) courses.push({ ...parsed, dayOfWeek: 0, period: 0, year, quarter })
+  // 集中講義（tdOth系）- 存在するセルをすべて動的に取得
+  const othCells = Array.from(
+    doc.querySelectorAll('[id^="ctl00_phContents_rrMain_ttTable_tdOth"]')
+  )
+  for (const cell of othCells) {
+    courses.push(...parseCoursesFromCell(cell, 0, 0, year, quarter))
   }
 
   return courses

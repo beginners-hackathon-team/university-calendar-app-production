@@ -140,9 +140,6 @@ export default function TasksPage() {
         {/* Assignment tab */}
         {tab === 'assignment' && (
           <div>
-            <p className="text-[13px] mb-5" style={{ color: 'var(--c-text-3)' }}>
-              拡張機能の「LMS情報取得」ボタンで課題を同期できます
-            </p>
             {pendingAssignments.length === 0 ? (
               <EmptyState label="現在の課題はありません" />
             ) : (

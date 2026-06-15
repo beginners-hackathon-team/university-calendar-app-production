@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from sqlalchemy.orm import Session
 from typing import Annotated
+import re
 import jwt
 from jwt import PyJWKClient
 
@@ -273,6 +274,17 @@ def delete_all_courses(
     return Response(status_code=204)
 
 
+def format_room_for_display(room: str | None) -> str:
+    if not room:
+        return ""
+    text = room
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(r'\s*[（(][^（）()]*[）)]\s*', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
 @app.get("/api/courses/{year_quarter}")
 def get_courses(
     year_quarter: str,
@@ -311,7 +323,7 @@ def get_courses(
             {
                 "id": course.id,
                 "name": course.name,
-                "room": course.room,
+                "room": format_room_for_display(course.room),
                 "teacher": course.teacher,
                 "year": course_date.year,
                 "quarter": course_date.quarter,
@@ -465,7 +477,14 @@ def import_courses(
     db: Session = Depends(get_db),
 ):
     ensure_profile(current_user.user_id, db)
-    # 既存の登録済みコースを (year, quarter, day_of_week, period) → (course, course_date) で取得
+
+    # 集中講義は day_of_week=None/period=0 が全授業で同一になるため、
+    # name を加えた 5-tuple をキーにして区別する
+    def make_key(year, quarter, day_of_week, period, name):
+        if day_of_week is None and period == 0:
+            return (year, quarter, None, 0, name)
+        return (year, quarter, day_of_week, period, None)
+
     existing_map: dict[tuple, tuple] = {}
     enrolled_course_ids = {
         e.course_id
@@ -475,12 +494,13 @@ def import_courses(
         for cd in db.query(CourseDate).filter(CourseDate.course_id.in_(enrolled_course_ids)).all():
             course_obj = db.query(Course).filter(Course.id == cd.course_id).one_or_none()
             if course_obj:
-                existing_map[(cd.year, cd.quarter, cd.day_of_week, cd.period)] = (course_obj, cd)
+                key = make_key(cd.year, cd.quarter, cd.day_of_week, cd.period, course_obj.name)
+                existing_map[key] = (course_obj, cd)
 
     incoming_keys: set[tuple] = set()
     count = 0
     for item in payload.courses:
-        key = (item.year, item.quarter, item.day_of_week, item.period)
+        key = make_key(item.year, item.quarter, item.day_of_week, item.period, item.name)
         incoming_keys.add(key)
         if key in existing_map:
             # 既存コースを上書き
@@ -517,8 +537,8 @@ def import_courses(
     # sync スコープ内にあって今回の取得結果に含まれないコースを削除
     sync_quarters = set(payload.sync_quarters)
     for key, (course_obj, cd_obj) in list(existing_map.items()):
-        year, quarter, _, _ = key
-        if year == payload.sync_year and quarter in sync_quarters and key not in incoming_keys:
+        y, q = key[0], key[1]
+        if y == payload.sync_year and q in sync_quarters and key not in incoming_keys:
             db.query(Enrollment).filter(
                 Enrollment.course_id == course_obj.id,
                 Enrollment.user_id == current_user.user_id,

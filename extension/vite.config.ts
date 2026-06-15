@@ -8,7 +8,7 @@ const entry = process.env.BUILD_ENTRY as string
 const ENTRY_PATHS: Record<string, string> = {
   background: 'src/background/background.ts',
   content: 'src/content/content.ts',
-  popup: 'src/popup/popup.tsx',
+  popup: 'src/popup/Popup.tsx',
   appContent: 'src/content/appContent.ts',
 }
 
