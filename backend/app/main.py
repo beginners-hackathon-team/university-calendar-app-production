@@ -27,7 +27,17 @@ from app.services.schedule import build_class_dates
 from app.schemas.course import CreateCourse, UpdateCourse
 from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
-from app.schemas.task import AssignmentPublic, ImportAssignmentsPayload, ImportLmsTasksPayload, TodoPublic, CreateTodo, UpdateTodo, PersonalEventPublic, CreatePersonalEvent, UpdatePersonalEvent
+from app.schemas.task import (
+    AssignmentPublic,
+    ImportAssignmentsPayload,
+    ImportLmsTasksPayload,
+    TodoPublic,
+    CreateTodo,
+    UpdateTodo,
+    PersonalEventPublic,
+    CreatePersonalEvent,
+    UpdatePersonalEvent,
+)
 from pydantic import BaseModel
 from app.core.config import settings
 
@@ -38,6 +48,7 @@ class CurrentUser:
     email: str
     display_name: str
     is_admin: bool
+
 
 app = FastAPI()
 
@@ -63,7 +74,9 @@ def health():
     return {"status": "ok"}
 
 
-def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]) -> dict:
+def verify_supabase_jwt(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+) -> dict:
     """SupabaseのJWTをJWKSで検証し、ペイロードを返す。"""
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
@@ -74,7 +87,9 @@ def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Dep
             options={"verify_aud": False},
         )
         if payload.get("sub") is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
         return payload
     except jwt.PyJWTError:
         raise HTTPException(
@@ -84,7 +99,9 @@ def verify_supabase_jwt(credentials: Annotated[HTTPAuthorizationCredentials, Dep
         )
 
 
-def get_current_user(payload: Annotated[dict, Depends(verify_supabase_jwt)]) -> CurrentUser:
+def get_current_user(
+    payload: Annotated[dict, Depends(verify_supabase_jwt)],
+) -> CurrentUser:
     """JWTペイロードからユーザー情報を組み立てる（DBアクセスなし）。"""
     user_metadata = payload.get("user_metadata") or {}
     app_metadata = payload.get("app_metadata") or {}
@@ -98,7 +115,9 @@ def get_current_user(payload: Annotated[dict, Depends(verify_supabase_jwt)]) -> 
     )
 
 
-def get_admin_user(current_user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:
+def get_admin_user(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+) -> CurrentUser:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return current_user
@@ -120,7 +139,10 @@ class UpdateMePayload(BaseModel):
 
 
 @app.get("/api/me")
-def read_me(current_user: Annotated[CurrentUser, Depends(get_current_user)], db: Session = Depends(get_db)):
+def read_me(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
     profile = db.get(Profile, current_user.user_id)
     return {
         "id": current_user.user_id,
@@ -136,12 +158,19 @@ def update_me(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    if body.assignment_sync_mode is not None and body.assignment_sync_mode not in ("auto", "manual"):
-        raise HTTPException(status_code=400, detail="assignment_sync_mode must be 'auto' or 'manual'")
+    if body.assignment_sync_mode is not None and body.assignment_sync_mode not in (
+        "auto",
+        "manual",
+    ):
+        raise HTTPException(
+            status_code=400, detail="assignment_sync_mode must be 'auto' or 'manual'"
+        )
 
     profile = db.get(Profile, current_user.user_id)
     if not profile:
-        profile = Profile(user_id=current_user.user_id, display_name=None, is_admin=False)
+        profile = Profile(
+            user_id=current_user.user_id, display_name=None, is_admin=False
+        )
         db.add(profile)
 
     if body.display_name is not None:
@@ -283,8 +312,8 @@ def format_room_for_display(room: str | None) -> str:
     prev = None
     while prev != text:
         prev = text
-        text = re.sub(r'\s*[（(][^（）()]*[）)]\s*', ' ', text)
-    return re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s*[（(][^（）()]*[）)]\s*", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 @app.get("/api/courses/{year_quarter}")
@@ -299,7 +328,12 @@ def get_courses(
         db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
     )
     if not enrollments:
-        logger.info("[get-courses] user=%s year=%d quarter=%d enrollments=0 → []", current_user.user_id, year, quarter)
+        logger.info(
+            "[get-courses] user=%s year=%d quarter=%d enrollments=0 → []",
+            current_user.user_id,
+            year,
+            quarter,
+        )
         return []
 
     course_ids = [enrollment.course_id for enrollment in enrollments]
@@ -340,12 +374,20 @@ def get_courses(
 
     logger.info(
         "[get-courses] user=%s year=%d quarter=%d enrollments=%d course_dates=%d returned=%d",
-        current_user.user_id, year, quarter, len(enrollments), len(course_dates), len(result),
+        current_user.user_id,
+        year,
+        quarter,
+        len(enrollments),
+        len(course_dates),
+        len(result),
     )
     for r in result:
         logger.info(
             "[get-courses]   name=%r day_of_week=%r period=%r is_intensive=%r",
-            r["name"], r["day_of_week"], r["period"], r["is_intensive_lct"],
+            r["name"],
+            r["day_of_week"],
+            r["period"],
+            r["is_intensive_lct"],
         )
     return result
 
@@ -500,19 +542,31 @@ def import_courses(
     existing_map: dict[tuple, tuple] = {}
     enrolled_course_ids = {
         e.course_id
-        for e in db.query(Enrollment).filter(Enrollment.user_id == current_user.user_id).all()
+        for e in db.query(Enrollment)
+        .filter(Enrollment.user_id == current_user.user_id)
+        .all()
     }
     if enrolled_course_ids:
-        for cd in db.query(CourseDate).filter(CourseDate.course_id.in_(enrolled_course_ids)).all():
-            course_obj = db.query(Course).filter(Course.id == cd.course_id).one_or_none()
+        for cd in (
+            db.query(CourseDate)
+            .filter(CourseDate.course_id.in_(enrolled_course_ids))
+            .all()
+        ):
+            course_obj = (
+                db.query(Course).filter(Course.id == cd.course_id).one_or_none()
+            )
             if course_obj:
-                key = make_key(cd.year, cd.quarter, cd.day_of_week, cd.period, course_obj.name)
+                key = make_key(
+                    cd.year, cd.quarter, cd.day_of_week, cd.period, course_obj.name
+                )
                 existing_map[key] = (course_obj, cd)
 
     incoming_keys: set[tuple] = set()
     count = 0
     for item in payload.courses:
-        key = make_key(item.year, item.quarter, item.day_of_week, item.period, item.name)
+        key = make_key(
+            item.year, item.quarter, item.day_of_week, item.period, item.name
+        )
         incoming_keys.add(key)
         if key in existing_map:
             # 既存コースを上書き
@@ -534,14 +588,16 @@ def import_courses(
             )
             db.add(course)
             db.flush()
-            db.add(CourseDate(
-                course_id=course.id,
-                year=item.year,
-                quarter=item.quarter,
-                day_of_week=item.day_of_week,
-                period=item.period,
-                is_intensive_lct=item.is_intensive_lct,
-            ))
+            db.add(
+                CourseDate(
+                    course_id=course.id,
+                    year=item.year,
+                    quarter=item.quarter,
+                    day_of_week=item.day_of_week,
+                    period=item.period,
+                    is_intensive_lct=item.is_intensive_lct,
+                )
+            )
             db.add(Enrollment(course_id=course.id, user_id=current_user.user_id))
             existing_map[key] = (course, CourseDate())
         count += 1
@@ -569,10 +625,14 @@ def import_assignments(
     db: Session = Depends(get_db),
 ):
     ensure_profile(current_user.user_id, db)
-    all_existing = db.query(Task).filter(
-        Task.user_id == current_user.user_id,
-        Task.type == 'assignment',
-    ).all()
+    all_existing = (
+        db.query(Task)
+        .filter(
+            Task.user_id == current_user.user_id,
+            Task.type == "assignment",
+        )
+        .all()
+    )
     by_contents_id = {a.task_contents_id: a for a in all_existing if a.task_contents_id}
     by_name = {(a.title, a.course_name): a for a in all_existing}
 
@@ -593,35 +653,52 @@ def import_assignments(
             if item.task_contents_id:
                 existing_a.task_contents_id = item.task_contents_id
         else:
-            db.add(Task(
-                user_id=current_user.user_id,
-                title=item.task_name,
-                task_contents_id=item.task_contents_id or '',
-                course_name=item.course_name,
-                submitted_at=item.submitted_at,
-                result=item.result or '',
-                score=item.score,
-                type='assignment',
-                source_type='lms',
-                source_provider='kanazawa_lms',
-            ))
+            db.add(
+                Task(
+                    user_id=current_user.user_id,
+                    title=item.task_name,
+                    task_contents_id=item.task_contents_id or "",
+                    course_name=item.course_name,
+                    submitted_at=item.submitted_at,
+                    result=item.result or "",
+                    score=item.score,
+                    type="assignment",
+                    source_type="lms",
+                    source_provider="kanazawa_lms",
+                )
+            )
         count += 1
 
     db.commit()
     return {"status": "ok", "count": count}
 
 
-_ASSIGNMENT_TITLE_KEYWORDS = frozenset([
-    'submission', 'submit', '提出', 'レポート', 'reaction paper', 'quiz', 'test',
-])
-_EXCLUDE_KINDS = frozenset(['資料', '掲示板'])
-_EXCLUDE_TITLE_KEYWORDS = frozenset([
-    'lesson materials', 'material', '資料', 'room for questions', '掲示板', 'forum',
-])
+_ASSIGNMENT_TITLE_KEYWORDS = frozenset(
+    [
+        "submission",
+        "submit",
+        "提出",
+        "レポート",
+        "reaction paper",
+        "quiz",
+        "test",
+    ]
+)
+_EXCLUDE_KINDS = frozenset(["資料", "掲示板"])
+_EXCLUDE_TITLE_KEYWORDS = frozenset(
+    [
+        "lesson materials",
+        "material",
+        "資料",
+        "room for questions",
+        "掲示板",
+        "forum",
+    ]
+)
 
 
 def _is_assignment_candidate(task_name: str, kind: str | None) -> bool:
-    title_lower = (task_name or '').lower()
+    title_lower = (task_name or "").lower()
     if any(kw.lower() in title_lower for kw in _ASSIGNMENT_TITLE_KEYWORDS):
         return True
     if kind and kind in _EXCLUDE_KINDS:
@@ -638,10 +715,14 @@ def import_lms_tasks(
     db: Session = Depends(get_db),
 ):
     ensure_profile(current_user.user_id, db)
-    all_existing = db.query(Task).filter(
-        Task.user_id == current_user.user_id,
-        Task.type == 'assignment',
-    ).all()
+    all_existing = (
+        db.query(Task)
+        .filter(
+            Task.user_id == current_user.user_id,
+            Task.type == "assignment",
+        )
+        .all()
+    )
 
     # Primary key: (lms_course_id, task_contents_id)
     by_course_content = {
@@ -667,8 +748,7 @@ def import_lms_tasks(
         .all()
     )
     course_type_map: dict[str, str] = {
-        c.lms_course_id: (c.lms_system_type or 'kanazawa_lms')
-        for c in enrolled_courses
+        c.lms_course_id: (c.lms_system_type or "kanazawa_lms") for c in enrolled_courses
     }
 
     received = len(payload.tasks)
@@ -685,8 +765,8 @@ def import_lms_tasks(
             existing_a = by_course_source_url.get((item.course_id, item.source_url))
 
         has_end = item.available_until is not None
-        lms_system = course_type_map.get(item.course_id or '', 'kanazawa_lms')
-        provider = 'webclass' if lms_system == 'webclass' else 'kanazawa_lms'
+        lms_system = course_type_map.get(item.course_id or "", "kanazawa_lms")
+        provider = "webclass" if lms_system == "webclass" else "kanazawa_lms"
 
         if existing_a:
             existing_a.title = item.title
@@ -707,22 +787,24 @@ def import_lms_tasks(
             existing_a.is_hidden = False
             updated += 1
         else:
-            db.add(Task(
-                user_id=current_user.user_id,
-                title=item.title,
-                task_contents_id=item.content_id or '',
-                course_name=item.course_name,
-                kind=item.kind,
-                lms_course_id=item.course_id,
-                source_url=item.source_url,
-                availability_start=item.available_from,
-                availability_end=item.available_until,
-                is_due_estimated=has_end,
-                result='',
-                type='assignment',
-                source_type='lms',
-                source_provider=provider,
-            ))
+            db.add(
+                Task(
+                    user_id=current_user.user_id,
+                    title=item.title,
+                    task_contents_id=item.content_id or "",
+                    course_name=item.course_name,
+                    kind=item.kind,
+                    lms_course_id=item.course_id,
+                    source_url=item.source_url,
+                    availability_start=item.available_from,
+                    availability_end=item.available_until,
+                    is_due_estimated=has_end,
+                    result="",
+                    type="assignment",
+                    source_type="lms",
+                    source_provider=provider,
+                )
+            )
             created += 1
 
     db.commit()
@@ -730,13 +812,22 @@ def import_lms_tasks(
     logger.info(
         "[import-lms-tasks] user=%s received=%d created=%d updated=%d "
         "done_preserved=%d hidden_restored=%d",
-        current_user.user_id, received, created, updated, done_preserved, hidden_restored,
+        current_user.user_id,
+        received,
+        created,
+        updated,
+        done_preserved,
+        hidden_restored,
     )
     for item in payload.tasks:
         candidate = _is_assignment_candidate(item.title, item.kind)
         logger.info(
             "[import-lms-tasks] item: kind=%r title=%r content_id=%r course_id=%r candidate=%s",
-            item.kind, item.title, item.content_id, item.course_id, candidate,
+            item.kind,
+            item.title,
+            item.content_id,
+            item.course_id,
+            candidate,
         )
     return {"status": "ok", "count": received}
 
@@ -751,7 +842,7 @@ def get_assignments(
         db.query(Task)
         .filter(
             Task.user_id == current_user.user_id,
-            Task.type == 'assignment',
+            Task.type == "assignment",
             Task.is_hidden == False,
             ~((Task.is_done == True) & (Task.done_at < cutoff)),
         )
@@ -767,12 +858,17 @@ def get_assignments(
 
     logger.info(
         "[get-assignments] user=%s total=%d excluded=%d returned=%d",
-        current_user.user_id, len(rows), len(excluded_items), len(candidates),
+        current_user.user_id,
+        len(rows),
+        len(excluded_items),
+        len(candidates),
     )
     for a in excluded_items:
         logger.info(
             "[get-assignments] excluded: id=%s kind=%r title=%r",
-            a.id, a.kind, a.title,
+            a.id,
+            a.kind,
+            a.title,
         )
     return candidates
 
@@ -800,11 +896,15 @@ def mark_assignment_done(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    a = db.query(Task).filter(
-        Task.id == assignment_id,
-        Task.user_id == current_user.user_id,
-        Task.type == 'assignment',
-    ).one_or_none()
+    a = (
+        db.query(Task)
+        .filter(
+            Task.id == assignment_id,
+            Task.user_id == current_user.user_id,
+            Task.type == "assignment",
+        )
+        .one_or_none()
+    )
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
     a.is_done = True
@@ -819,11 +919,15 @@ def delete_assignment(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    a = db.query(Task).filter(
-        Task.id == assignment_id,
-        Task.user_id == current_user.user_id,
-        Task.type == 'assignment',
-    ).one_or_none()
+    a = (
+        db.query(Task)
+        .filter(
+            Task.id == assignment_id,
+            Task.user_id == current_user.user_id,
+            Task.type == "assignment",
+        )
+        .one_or_none()
+    )
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
     a.is_hidden = True
@@ -841,7 +945,7 @@ def get_todos(
         db.query(Task)
         .filter(
             Task.user_id == current_user.user_id,
-            Task.type == 'todo',
+            Task.type == "todo",
             Task.is_hidden == False,
             ~((Task.is_done == True) & (Task.done_at < cutoff)),
         )
@@ -859,9 +963,9 @@ def create_todo(
     todo = Task(
         user_id=current_user.user_id,
         title=body.title,
-        type='todo',
-        source_type='manual',
-        source_provider='user',
+        type="todo",
+        source_type="manual",
+        source_provider="user",
     )
     db.add(todo)
     db.commit()
@@ -876,11 +980,15 @@ def update_todo(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    todo = db.query(Task).filter(
-        Task.id == todo_id,
-        Task.user_id == current_user.user_id,
-        Task.type == 'todo',
-    ).one_or_none()
+    todo = (
+        db.query(Task)
+        .filter(
+            Task.id == todo_id,
+            Task.user_id == current_user.user_id,
+            Task.type == "todo",
+        )
+        .one_or_none()
+    )
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
     if body.title is not None:
@@ -902,11 +1010,15 @@ def delete_todo(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    todo = db.query(Task).filter(
-        Task.id == todo_id,
-        Task.user_id == current_user.user_id,
-        Task.type == 'todo',
-    ).one_or_none()
+    todo = (
+        db.query(Task)
+        .filter(
+            Task.id == todo_id,
+            Task.user_id == current_user.user_id,
+            Task.type == "todo",
+        )
+        .one_or_none()
+    )
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
     todo.is_hidden = True
@@ -919,7 +1031,11 @@ def get_personal_events(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    return db.query(PersonalEvent).filter(PersonalEvent.user_id == current_user.user_id).all()
+    return (
+        db.query(PersonalEvent)
+        .filter(PersonalEvent.user_id == current_user.user_id)
+        .all()
+    )
 
 
 @app.post("/api/personal-events", response_model=PersonalEventPublic, status_code=201)
@@ -950,10 +1066,14 @@ def update_personal_event(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    event = db.query(PersonalEvent).filter(
-        PersonalEvent.id == event_id,
-        PersonalEvent.user_id == current_user.user_id,
-    ).one_or_none()
+    event = (
+        db.query(PersonalEvent)
+        .filter(
+            PersonalEvent.id == event_id,
+            PersonalEvent.user_id == current_user.user_id,
+        )
+        .one_or_none()
+    )
     if not event:
         raise HTTPException(status_code=404, detail="Personal event not found")
     event.title = body.title
@@ -972,10 +1092,14 @@ def delete_personal_event(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    event = db.query(PersonalEvent).filter(
-        PersonalEvent.id == event_id,
-        PersonalEvent.user_id == current_user.user_id,
-    ).one_or_none()
+    event = (
+        db.query(PersonalEvent)
+        .filter(
+            PersonalEvent.id == event_id,
+            PersonalEvent.user_id == current_user.user_id,
+        )
+        .one_or_none()
+    )
     if not event:
         raise HTTPException(status_code=404, detail="Personal event not found")
     db.delete(event)
@@ -1063,7 +1187,7 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
 
   <footer>本ポリシーは予告なく変更する場合があります。変更後もご利用を続けた場合、変更内容に同意したものとみなします。</footer>
 </body>
-</html>""".replace('__APP_URL__', settings.app_url)
+</html>""".replace("__APP_URL__", settings.app_url)
 
 
 @app.get("/privacy", include_in_schema=False)
