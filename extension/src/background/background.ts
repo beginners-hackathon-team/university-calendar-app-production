@@ -8,12 +8,59 @@ import type {
   OpenLmsTabResponse,
   OpenPortalTabResponse,
   ReturnToAppResponse,
+  RefreshTokenResponse,
+  GetSyncModeResponse,
 } from '../shared/messages'
 import { postToBackend, importCourses, importAssignments, importLmsTasks } from '../shared/api'
 
-type AnyResponse = FetchUrlResponse | PostResponse | ImportCoursesResponse | ImportAssignmentsResponse | ImportLmsTasksResponse | OpenLmsTabResponse | OpenPortalTabResponse | ReturnToAppResponse
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const APP_URL = import.meta.env.VITE_APP_URL as string
 
-const APP_URL_FALLBACK = 'https://ku-calendar-app.onrender.com'
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !APP_URL) {
+  throw new Error('[extension] Required env vars missing: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_APP_URL')
+}
+
+type AnyResponse =
+  | FetchUrlResponse
+  | PostResponse
+  | ImportCoursesResponse
+  | ImportAssignmentsResponse
+  | ImportLmsTasksResponse
+  | OpenLmsTabResponse
+  | OpenPortalTabResponse
+  | ReturnToAppResponse
+  | RefreshTokenResponse
+  | GetSyncModeResponse
+
+// Supabase refresh token → 新しい access_token を返す（失敗時は null）
+async function refreshAccessToken(): Promise<string | null> {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['refresh_token'], result => {
+      const refreshToken = result['refresh_token'] as string | undefined
+      if (!refreshToken) { resolve(null); return }
+
+      fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+        .then(res => res.ok
+          ? res.json() as Promise<{ access_token: string; refresh_token: string }>
+          : Promise.reject(new Error(`supabase refresh failed: ${res.status}`))
+        )
+        .then(data => {
+          chrome.storage.local.set({ access_token: data.access_token, refresh_token: data.refresh_token })
+          resolve(data.access_token)
+        })
+        .catch(() => resolve(null))
+    })
+  })
+}
 
 chrome.runtime.onMessage.addListener(
   (message: Message, sender, sendResponse: (r: AnyResponse) => void) => {
@@ -33,8 +80,46 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === 'IMPORT_COURSES') {
-      importCourses(message.courses, message.syncYear, message.syncQuarters)
-        .then(count => sendResponse({ success: true, count }))
+      const syncYear = message.syncYear
+      const syncQuarters = message.syncQuarters
+      importCourses(message.courses, syncYear, syncQuarters)
+        .then(async count => {
+          // インポート成功後、該当学期のキャッシュを即時更新（再フェッチ）
+          const QUARTER_KEY: Record<number, string> = { 1: 'Q1', 2: 'Q2', 3: 'Q3', 4: 'Q4' }
+          try {
+            const stored = await chrome.storage.local.get(['access_token', 'cachedCoursesByQuarter'])
+            const token = stored['access_token'] as string | undefined
+            const existing = (stored['cachedCoursesByQuarter'] ?? {}) as Record<string, unknown[]>
+
+            if (token) {
+              const fetched = await Promise.all(
+                syncQuarters.map(async q => {
+                  const key = QUARTER_KEY[q]
+                  if (!key) return null
+                  const res = await fetch(`${APP_URL}/api/courses/${syncYear}-${q}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  })
+                  if (!res.ok) return null
+                  return [key, await res.json()] as [string, unknown[]]
+                })
+              )
+              const newCache = { ...existing }
+              for (const entry of fetched) {
+                if (entry) newCache[entry[0]] = entry[1]
+              }
+              chrome.storage.local.set({
+                cachedCoursesByQuarter: newCache,
+                cachedCoursesUpdatedAt: new Date().toISOString(),
+              })
+            } else {
+              chrome.storage.local.remove(['cachedCoursesByQuarter', 'cachedCoursesUpdatedAt'])
+            }
+          } catch {
+            chrome.storage.local.remove(['cachedCoursesByQuarter', 'cachedCoursesUpdatedAt'])
+          }
+
+          sendResponse({ success: true, count })
+        })
         .catch(err => sendResponse({ success: false, error: String(err) }))
       return true
     }
@@ -55,8 +140,7 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === 'OPEN_LMS_TAB') {
       const tabId = sender.tab?.id ?? null
-      const appUrl = sender.tab?.url ?? APP_URL_FALLBACK
-      // chrome.storage.session はService Worker 再起動後も値を保持する
+      const appUrl = sender.tab?.url ?? APP_URL
       chrome.storage.session.set({ appTabId: tabId, appUrl }, () => {
         chrome.tabs.create({ url: message.url })
         sendResponse({ success: true })
@@ -66,7 +150,7 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === 'OPEN_PORTAL_TAB') {
       const tabId = sender.tab?.id ?? null
-      const appUrl = sender.tab?.url ?? APP_URL_FALLBACK
+      const appUrl = sender.tab?.url ?? APP_URL
       chrome.storage.session.set({ appTabId: tabId, appUrl }, () => {
         chrome.tabs.create({ url: message.url })
         sendResponse({ success: true })
@@ -74,13 +158,65 @@ chrome.runtime.onMessage.addListener(
       return true
     }
 
+    if (message.type === 'REFRESH_TOKEN') {
+      refreshAccessToken()
+        .then(token => {
+          if (token) sendResponse({ success: true, access_token: token })
+          else sendResponse({ success: false, error: 'refresh failed' })
+        })
+      return true
+    }
+
+    if (message.type === 'GET_SYNC_MODE') {
+      ;(async () => {
+        // トークン取得（なければ refresh を試みる）
+        let token = ((await chrome.storage.local.get(['access_token']))['access_token'] as string | undefined) ?? null
+        if (!token) {
+          token = await refreshAccessToken()
+          if (!token) { sendResponse({ success: false, auth_required: true }); return }
+        }
+
+        const fetchMode = async (t: string): Promise<'auto' | 'manual'> => {
+          const res = await fetch(`${APP_URL}/api/me`, {
+            headers: { 'Authorization': `Bearer ${t}` },
+          })
+          if (res.status === 401 || res.status === 403) {
+            throw Object.assign(new Error('auth'), { isAuth: true })
+          }
+          if (!res.ok) throw new Error(`/api/me failed: ${res.status}`)
+          const data = await res.json() as { assignment_sync_mode?: string }
+          return data.assignment_sync_mode === 'manual' ? 'manual' : 'auto'
+        }
+
+        try {
+          const mode = await fetchMode(token)
+          sendResponse({ success: true, mode })
+        } catch (e: unknown) {
+          if (e instanceof Error && (e as Error & { isAuth?: boolean }).isAuth) {
+            // 401/403 → refresh して1回だけリトライ
+            const newToken = await refreshAccessToken()
+            if (!newToken) { sendResponse({ success: false, auth_required: true }); return }
+            try {
+              const mode = await fetchMode(newToken)
+              sendResponse({ success: true, mode })
+            } catch {
+              sendResponse({ success: false, auth_required: true })
+            }
+          } else {
+            // ネットワークエラー等: デフォルト 'auto' を返す
+            sendResponse({ success: true, mode: 'auto' })
+          }
+        }
+      })()
+      return true
+    }
+
     if (message.type === 'RETURN_TO_APP') {
       const portalTabId = sender.tab?.id ?? null
-      const quarter = message.quarter
 
       chrome.storage.session.get(['appTabId', 'appUrl'], result => {
         const savedAppTabId = (result['appTabId'] as number | undefined) ?? null
-        const savedAppUrl = (result['appUrl'] as string | undefined) || APP_URL_FALLBACK
+        const savedAppUrl = (result['appUrl'] as string | undefined) || APP_URL
 
         const returnUrl = message.path
           ? (() => { const u = new URL(savedAppUrl); u.pathname = message.path!; return u.toString() })()

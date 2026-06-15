@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useMe } from "./hooks/useMe";
 import { logout } from "./api/auth";
-import { updateDisplayName } from "./api/me";
+import { updateDisplayName, updateAssignmentSyncMode } from "./api/me";
 import { useNavigate } from "react-router-dom";
 import { HOME_PATH_KEY, DEFAULT_HOME } from "./App";
 
@@ -66,6 +66,7 @@ export default function Layout() {
   const [homePath, setHomePath] = useState(
     () => localStorage.getItem(HOME_PATH_KEY) ?? DEFAULT_HOME
   );
+  const [syncMode, setSyncMode] = useState<'auto' | 'manual'>('auto');
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -103,7 +104,6 @@ export default function Layout() {
   };
 
   const HOME_OPTIONS = [
-    { path: "/calendar", label: "カレンダー" },
     { path: "/courses", label: "時間割" },
     { path: "/tasks", label: "タスク" },
   ];
@@ -113,8 +113,18 @@ export default function Layout() {
     setHomePath(path);
   };
 
+  const handleSetSyncMode = async (mode: 'auto' | 'manual') => {
+    setSyncMode(mode);
+    await updateAssignmentSyncMode(mode);
+  };
+
+  useEffect(() => {
+    if (me?.assignment_sync_mode) {
+      setSyncMode(me.assignment_sync_mode);
+    }
+  }, [me?.assignment_sync_mode]);
+
   const navItems = [
-    { to: "/calendar", label: "カレンダー" },
     { to: "/courses", label: "時間割" },
     { to: "/tasks", label: "タスク" },
   ];
@@ -283,6 +293,30 @@ export default function Layout() {
                           ].join(" ")}
                         >
                           {homePath === opt.path && <CheckSmall />}
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 課題取得設定 */}
+                  <div className="px-4 py-3 border-b border-[#F5F5F5]">
+                    <p className="text-[10px] font-semibold text-[#BBBBBB] uppercase tracking-[0.07em] mb-2">
+                      課題取得
+                    </p>
+                    <div className="flex gap-1.5">
+                      {([{ value: 'auto', label: '自動' }, { value: 'manual', label: 'ボタン式' }] as const).map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleSetSyncMode(opt.value)}
+                          className={[
+                            "flex-1 flex items-center justify-center gap-1 py-[6px] text-[12px] font-medium rounded-[7px] transition-all duration-100",
+                            syncMode === opt.value
+                              ? "bg-[#EEF3FE] text-[#4B82F5]"
+                              : "bg-[#F6F6F6] text-[#777] hover:bg-[#EEEEEE]",
+                          ].join(" ")}
+                        >
+                          {syncMode === opt.value && <CheckSmall />}
                           {opt.label}
                         </button>
                       ))}

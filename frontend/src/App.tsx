@@ -27,7 +27,7 @@ function AppLoader() {
 }
 
 export const HOME_PATH_KEY = 'ku-home-path'
-export const DEFAULT_HOME = '/calendar'
+export const DEFAULT_HOME = '/courses'
 export function getHomePath(): string {
     return localStorage.getItem(HOME_PATH_KEY) ?? DEFAULT_HOME
 }

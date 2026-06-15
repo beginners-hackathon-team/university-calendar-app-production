@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Assignment, Todo } from '../api/tasks';
+import { buildAcanthusSsoUrl } from '../lib/universityUrls';
 import {
   fetchAssignments,
   fetchLmsSystemTypes,
@@ -153,7 +154,7 @@ export default function TasksPage() {
                     title={a.task_name}
                     subtitle={a.course_name ?? undefined}
                     subtitleHref={a.lms_course_id
-                      ? `https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/?courseId=${a.lms_course_id}&systemType=${lmsSystemTypes[a.lms_course_id] ?? ''}`
+                      ? buildAcanthusSsoUrl(a.lms_course_id, lmsSystemTypes[a.lms_course_id] ?? '')
                       : undefined}
                     badge={a.kind ?? undefined}
                     deadline={a.available_until ?? undefined}
@@ -246,7 +247,7 @@ export default function TasksPage() {
                       title={item.data.task_name}
                       subtitle={item.data.course_name ?? undefined}
                       subtitleHref={item.data.lms_course_id
-                        ? `https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/?courseId=${item.data.lms_course_id}&systemType=${lmsSystemTypes[item.data.lms_course_id] ?? ''}`
+                        ? buildAcanthusSsoUrl(item.data.lms_course_id, lmsSystemTypes[item.data.lms_course_id] ?? '')
                         : undefined}
                       badge={item.data.kind ?? undefined}
                       deadline={item.data.available_until ?? undefined}

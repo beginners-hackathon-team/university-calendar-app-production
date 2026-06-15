@@ -5,13 +5,13 @@ export const PORTAL_BLANK_URL = 'https://eduweb.sta.kanazawa-u.ac.jp/Portal/Stud
 export function buildRegistListUrl(term: 'Q1' | 'Q2' | 'Q3' | 'Q4'): string {
   return `${REGIST_LIST_URL}?targetTerm=${term}`
 }
+
 export const LMS_COURSE_BASE = 'https://lms-wc.el.kanazawa-u.ac.jp/webclass/course.php'
 
-const backendBase = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? 'https://ku-calendar-app.onrender.com'
-export const SYNC_ENDPOINT = `${backendBase}/api/extension/sync`
-export const IMPORT_COURSES_ENDPOINT = `${backendBase}/api/extension/import-courses`
-export const IMPORT_ASSIGNMENTS_ENDPOINT = `${backendBase}/api/extension/import-assignments`
-export const IMPORT_LMS_TASKS_ENDPOINT = `${backendBase}/api/extension/import-lms-tasks`
+// ホスト名のみ（closest() セレクタなどで使用）
+export const ACANTHUS_HOST = 'acanthus.cis.kanazawa-u.ac.jp'
+export const LMS_HOST = 'lms-wc.el.kanazawa-u.ac.jp'
+export const ACANTHUS_SSO_BASE = 'https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/'
 
 export function buildLectureDetailUrl(lctYear: string, lctCd: string): string {
   return `https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/LectureList.aspx?lct_year=${lctYear}&lct_cd=${lctCd}`

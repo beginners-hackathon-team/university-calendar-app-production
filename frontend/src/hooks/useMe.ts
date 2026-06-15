@@ -5,6 +5,7 @@ export type Me = {
     id: string;
     display_name: string | null;
     is_admin: boolean;
+    assignment_sync_mode: 'auto' | 'manual';
 };
 
 export function useMe() {

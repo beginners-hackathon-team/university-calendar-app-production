@@ -40,7 +40,7 @@ extension/.claude
 extension/.env
 extension/.env.local
 extension/.env.*
-extension/.env.example
+!extension/.env.example
 extension/.git
 extension/.github
 extension/html-sample.txt

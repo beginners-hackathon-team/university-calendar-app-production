@@ -84,6 +84,27 @@ export interface ReturnToAppMessage {
   path?: string  // '/tasks' | '/courses' etc.
 }
 
+export interface RefreshTokenMessage {
+  type: 'REFRESH_TOKEN'
+}
+
+export interface RefreshTokenResponse {
+  success: boolean
+  access_token?: string
+  error?: string
+}
+
+export interface GetSyncModeMessage {
+  type: 'GET_SYNC_MODE'
+}
+
+export interface GetSyncModeResponse {
+  success: boolean
+  mode?: 'auto' | 'manual'
+  auth_required?: boolean
+  error?: string
+}
+
 export type Message =
   | FetchUrlMessage
   | PostToBackendMessage
@@ -93,6 +114,8 @@ export type Message =
   | OpenLmsTabMessage
   | OpenPortalTabMessage
   | ReturnToAppMessage
+  | RefreshTokenMessage
+  | GetSyncModeMessage
 
 export interface FetchUrlResponse {
   success: boolean

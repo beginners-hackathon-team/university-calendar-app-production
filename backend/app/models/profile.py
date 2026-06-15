@@ -10,5 +10,6 @@ class Profile(Base):
     user_id: Mapped[str] = mapped_column(PGUUID(as_uuid=False), primary_key=True)
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    assignment_sync_mode: Mapped[str] = mapped_column(String, nullable=False, default='auto', server_default='auto')
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

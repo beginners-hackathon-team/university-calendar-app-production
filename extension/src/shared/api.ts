@@ -1,5 +1,14 @@
-import { SYNC_ENDPOINT, IMPORT_COURSES_ENDPOINT, IMPORT_ASSIGNMENTS_ENDPOINT, IMPORT_LMS_TASKS_ENDPOINT } from './urls'
 import type { SyncType, CourseImportItem, ImportAssignmentItem, ImportLmsTaskItem } from './messages'
+
+const APP_URL = import.meta.env.VITE_APP_URL as string
+if (!APP_URL) {
+  throw new Error('[extension] Required env var missing: VITE_APP_URL')
+}
+
+const SYNC_ENDPOINT = `${APP_URL}/api/extension/sync`
+const IMPORT_COURSES_ENDPOINT = `${APP_URL}/api/extension/import-courses`
+const IMPORT_ASSIGNMENTS_ENDPOINT = `${APP_URL}/api/extension/import-assignments`
+const IMPORT_LMS_TASKS_ENDPOINT = `${APP_URL}/api/extension/import-lms-tasks`
 
 export interface SyncPayload {
   type: SyncType

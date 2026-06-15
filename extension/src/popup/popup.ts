@@ -1,4 +1,7 @@
-const APP_URL = import.meta.env.VITE_BACKEND_URL ?? 'https://ku-calendar-app.onrender.com'
+const APP_URL = import.meta.env.VITE_APP_URL as string
+if (!APP_URL) {
+  throw new Error('[extension] Required env var missing: VITE_APP_URL')
+}
 
 const statusBox  = document.getElementById('status-box')  as HTMLDivElement
 const statusText = document.getElementById('status-text') as HTMLSpanElement

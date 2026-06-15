@@ -111,8 +111,9 @@ def ensure_profile(user_id: str, db: Session) -> Profile:
     return profile
 
 
-class UpdateDisplayName(BaseModel):
-    display_name: str
+class UpdateMePayload(BaseModel):
+    display_name: str | None = None
+    assignment_sync_mode: str | None = None
 
 
 @app.get("/api/me")
@@ -122,23 +123,34 @@ def read_me(current_user: Annotated[CurrentUser, Depends(get_current_user)], db:
         "id": current_user.user_id,
         "display_name": profile.display_name if profile else None,
         "is_admin": current_user.is_admin,
+        "assignment_sync_mode": profile.assignment_sync_mode if profile else "auto",
     }
 
 
 @app.patch("/api/me")
 def update_me(
-    body: UpdateDisplayName,
+    body: UpdateMePayload,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
+    if body.assignment_sync_mode is not None and body.assignment_sync_mode not in ("auto", "manual"):
+        raise HTTPException(status_code=400, detail="assignment_sync_mode must be 'auto' or 'manual'")
+
     profile = db.get(Profile, current_user.user_id)
-    if profile:
-        profile.display_name = body.display_name
-    else:
-        profile = Profile(user_id=current_user.user_id, display_name=body.display_name, is_admin=False)
+    if not profile:
+        profile = Profile(user_id=current_user.user_id, display_name=None, is_admin=False)
         db.add(profile)
+
+    if body.display_name is not None:
+        profile.display_name = body.display_name
+    if body.assignment_sync_mode is not None:
+        profile.assignment_sync_mode = body.assignment_sync_mode
+
     db.commit()
-    return {"display_name": profile.display_name}
+    return {
+        "display_name": profile.display_name,
+        "assignment_sync_mode": profile.assignment_sync_mode,
+    }
 
 
 @app.post("/api/course")
@@ -863,7 +875,7 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
   <h2>3. 送信先</h2>
   <p>収集した情報は、以下のサーバーに送信されます。</p>
   <ul>
-    <li><strong>送信先URL</strong>: <code>https://ku-calendar-app.onrender.com</code></li>
+    <li><strong>送信先URL</strong>: <code>__APP_URL__</code></li>
     <li><strong>送信タイミング</strong>: ユーザーが拡張機能のボタン（「履修情報を取得」「全Qを取得」「LMS情報を取得」）を押したときのみ</li>
     <li><strong>認証トークンの扱い</strong>: 端末内の <code>chrome.storage.local</code> にのみ保存され、外部サーバーには送信されません</li>
   </ul>
@@ -888,7 +900,7 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
   <h2>6. ユーザーによるデータ削除方法</h2>
   <ul>
     <li><strong>拡張機能のデータを削除する</strong>: Chromeの設定 → 拡張機能 → 本拡張機能を削除（アンインストール）すると、<code>chrome.storage.local</code> に保存されたトークンが完全に削除されます。</li>
-    <li><strong>アプリサーバー上のデータを削除する</strong>: KU Calendar（<a href="https://ku-calendar-app.onrender.com">https://ku-calendar-app.onrender.com</a>）にログインし、アカウント削除機能を使用してください。</li>
+    <li><strong>アプリサーバー上のデータを削除する</strong>: KU Calendar（<a href="__APP_URL__">__APP_URL__</a>）にログインし、アカウント削除機能を使用してください。</li>
   </ul>
 
   <h2>7. 第三者への提供</h2>
@@ -900,7 +912,7 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
 
   <footer>本ポリシーは予告なく変更する場合があります。変更後もご利用を続けた場合、変更内容に同意したものとみなします。</footer>
 </body>
-</html>"""
+</html>""".replace('__APP_URL__', settings.app_url)
 
 
 @app.get("/privacy", include_in_schema=False)

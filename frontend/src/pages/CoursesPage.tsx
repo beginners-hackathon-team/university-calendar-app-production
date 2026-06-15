@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { periodToTime } from '../periodToTime';
 import { fetchCourses } from '../api/courses';
+import { buildPortalRegistListUrl, buildAcanthusSsoUrl } from '../lib/universityUrls';
 
 const CURRENT_YEAR = 2026;
 
@@ -120,7 +121,7 @@ export default function CoursesPage() {
 
             {/* Portal registration link — most prominent element */}
             <a
-              href={`https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/RegistList.aspx?targetTerm=${QUARTER_PORTAL[selectedQuarter] ?? 'Q1'}`}
+              href={buildPortalRegistListUrl(QUARTER_PORTAL[selectedQuarter] ?? 'Q1')}
               target="_blank"
               rel="noopener noreferrer"
               className="ku-portal-btn"
@@ -249,7 +250,7 @@ export default function CoursesPage() {
 
 function CourseCell({ course, compact = false }: { course: Course; compact?: boolean }) {
   const lmsUrl = course.lms_course_id
-    ? `https://acanthus.cis.kanazawa-u.ac.jp/base/lms-course/sso-link/?courseId=${course.lms_course_id}&systemType=${course.lms_system_type ?? ''}`
+    ? buildAcanthusSsoUrl(course.lms_course_id, course.lms_system_type ?? '')
     : null;
 
   const cardStyle: React.CSSProperties = {

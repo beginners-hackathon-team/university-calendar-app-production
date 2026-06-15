@@ -4,7 +4,10 @@
   "description": "金沢大学ポータルおよびWebClass LMS上のHTMLを取得し、既存バックエンドへ送信するChrome拡張機能を実装する。",
   "main": "index.js",
   "scripts": {
-    "build": "BUILD_ENTRY=background vite build && BUILD_ENTRY=content vite build && BUILD_ENTRY=popup vite build && BUILD_ENTRY=appContent vite build && cp manifest.json dist/ && cp src/popup/popup.html dist/ && cp -r icons dist/",
+    "build": "node scripts/generate-manifest.js production && BUILD_ENTRY=background vite build && BUILD_ENTRY=content vite build && BUILD_ENTRY=popup vite build && BUILD_ENTRY=appContent vite build && cp manifest.json dist/ && cp src/popup/popup.html dist/ && cp -r icons dist/",
+    "build:dev": "node scripts/generate-manifest.js development && BUILD_ENTRY=background vite build --mode development && BUILD_ENTRY=content vite build --mode development && BUILD_ENTRY=popup vite build --mode development && BUILD_ENTRY=appContent vite build --mode development && cp manifest.json dist/ && cp src/popup/popup.html dist/ && cp -r icons dist/",
+    "manifest:dev": "node scripts/generate-manifest.js development",
+    "manifest:prod": "node scripts/generate-manifest.js production",
     "dev:background": "BUILD_ENTRY=background vite build --watch",
     "dev:content": "BUILD_ENTRY=content vite build --watch",
     "dev:popup": "BUILD_ENTRY=popup vite build --watch"

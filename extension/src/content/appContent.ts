@@ -1,7 +1,11 @@
 // 自作アプリ上の LMS リンクをインターセプトし、
 // Background 経由でタブを開いてアプリのタブIDを保存する
 
+import { ACANTHUS_HOST, LMS_HOST } from '../shared/urls'
+
 const QUARTER_MAP: Record<string, number> = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 }
+
+const LMS_ANCHOR_SELECTOR = `a[href*="${ACANTHUS_HOST}"], a[href*="${LMS_HOST}"]`
 
 function saveSupabaseToken(): void {
   // localStorage から Supabase のセッショントークンを取得して chrome.storage.local に保存
@@ -11,8 +15,9 @@ function saveSupabaseToken(): void {
   try {
     const raw = localStorage.getItem(authKey)
     const session = raw ? JSON.parse(raw) : null
-    const token = session?.access_token ?? null
-    chrome.storage.local.set({ access_token: token })
+    const access_token = session?.access_token ?? null
+    const refresh_token = session?.refresh_token ?? null
+    chrome.storage.local.set({ access_token, refresh_token })
   } catch {
     // JSON parse 失敗時は無視
   }
@@ -32,7 +37,7 @@ document.addEventListener('click', e => {
   const target = e.target as HTMLElement
 
   // LMS リンク（Acanthus SSO または WebClass 直リンク）
-  const lmsAnchor = target.closest('a[href*="acanthus.cis.kanazawa-u.ac.jp"], a[href*="lms-wc.el.kanazawa-u.ac.jp"]') as HTMLAnchorElement | null
+  const lmsAnchor = target.closest(LMS_ANCHOR_SELECTOR) as HTMLAnchorElement | null
   if (lmsAnchor) {
     e.preventDefault()
     e.stopPropagation()
