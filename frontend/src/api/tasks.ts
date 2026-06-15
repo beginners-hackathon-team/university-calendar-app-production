@@ -9,8 +9,10 @@ export type Assignment = {
   result: string;
   score: string | null;
   kind: string | null;
-  available_from: string | null;
-  available_until: string | null;
+  availability_start: string | null;
+  availability_end: string | null;
+  source_url: string | null;
+  is_due_estimated: boolean;
   lms_course_id: string | null;
   is_done: boolean;
   done_at: string | null;

@@ -83,7 +83,6 @@ function formatUnixTs(ts: number): string | null {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-const LMS_TASK_KINDS = new Set(['レポート', '試験', '自習', '一問一答'])
 
 /* ── 認証 ───────────────────────────────────────────────── */
 
@@ -964,15 +963,17 @@ function initOnDomReady() {
         const courseInfo = parseLmsCoursePage(html)
         if (!courseInfo) return null
         return courseInfo.contents
-          .filter(c => LMS_TASK_KINDS.has(c.kind) && c.id)
+          .filter(c => c.id || c.sourceUrl)
           .map(c => ({
-            lms_contents_id: c.id,
+            content_id: c.id,
+            source_url: c.sourceUrl,
             title: c.name,
             kind: c.kind,
+            course_id: courseInfo.courseId || null,
             course_name: courseInfo.courseName,
-            lms_course_id: courseInfo.courseId,
             available_from: formatUnixTs(c.startDate),
             available_until: formatUnixTs(c.endDate),
+            raw_text: c.rawText,
           }))
       }
 

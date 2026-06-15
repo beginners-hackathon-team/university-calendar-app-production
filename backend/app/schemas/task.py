@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -41,12 +41,19 @@ class AssignmentPublic(BaseModel):
     result: str
     score: Optional[str]
     kind: Optional[str]
-    available_from: Optional[str]
-    available_until: Optional[str]
+    availability_start: Optional[str]
+    availability_end: Optional[str]
+    source_url: Optional[str]
+    is_due_estimated: bool
     lms_course_id: Optional[str]
     is_done: bool
     done_at: Optional[datetime]
     created_at: datetime
+
+    @field_validator('task_contents_id', 'result', mode='before')
+    @classmethod
+    def coerce_none_to_str(cls, v):
+        return v if v is not None else ''
 
     class Config:
         from_attributes = True
@@ -66,13 +73,15 @@ class ImportAssignmentsPayload(BaseModel):
 
 
 class ImportLmsTaskItem(BaseModel):
-    lms_contents_id: str
+    content_id: Optional[str] = None
+    source_url: Optional[str] = None
     title: str
-    kind: str
+    kind: Optional[str] = None
+    course_id: Optional[str] = None
     course_name: Optional[str] = None
-    lms_course_id: Optional[str] = None
     available_from: Optional[str] = None
     available_until: Optional[str] = None
+    raw_text: Optional[str] = None
 
 
 class ImportLmsTasksPayload(BaseModel):

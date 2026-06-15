@@ -15,13 +15,15 @@ export interface ImportAssignmentsMessage {
 }
 
 export interface ImportLmsTaskItem {
-  lms_contents_id: string
+  content_id: string | null
+  source_url: string | null
   title: string
-  kind: string
+  kind: string | null
+  course_id: string | null
   course_name: string | null
-  lms_course_id: string | null
   available_from: string | null  // "2026/06/29 20:01"
   available_until: string | null // "2026/07/06 20:00"
+  raw_text: string | null
 }
 
 export interface ImportLmsTasksMessage {
