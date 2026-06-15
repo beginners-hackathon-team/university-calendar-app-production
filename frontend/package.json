@@ -19,9 +19,13 @@
     "tailwindcss": "^4.3.1",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.0.0",
+    "uipro-cli": "^2.2.3",
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@floating-ui/react": "^0.27.19",
     "@fullcalendar/core": "^6.1.20",
     "@fullcalendar/daygrid": "^6.1.20",
