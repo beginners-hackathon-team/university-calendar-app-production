@@ -34,8 +34,8 @@ export default function TasksPage() {
   const pendingAssignments = assignments
     .filter(a => !a.is_done)
     .sort((a, b) => {
-      const ta = a.available_until ? Date.parse(a.available_until.replace(/\//g, '-').replace(' ', 'T')) : Infinity;
-      const tb = b.available_until ? Date.parse(b.available_until.replace(/\//g, '-').replace(' ', 'T')) : Infinity;
+      const ta = a.availability_end ? Date.parse(a.availability_end.replace(/\//g, '-').replace(' ', 'T')) : Infinity;
+      const tb = b.availability_end ? Date.parse(b.availability_end.replace(/\//g, '-').replace(' ', 'T')) : Infinity;
       return ta - tb;
     });
 
@@ -140,9 +140,6 @@ export default function TasksPage() {
         {/* Assignment tab */}
         {tab === 'assignment' && (
           <div>
-            <p className="text-[13px] mb-5" style={{ color: 'var(--c-text-3)' }}>
-              拡張機能の「LMS情報取得」ボタンで課題を同期できます
-            </p>
             {pendingAssignments.length === 0 ? (
               <EmptyState label="現在の課題はありません" />
             ) : (
@@ -157,7 +154,7 @@ export default function TasksPage() {
                       ? buildAcanthusSsoUrl(a.lms_course_id, lmsSystemTypes[a.lms_course_id] ?? '')
                       : undefined}
                     badge={a.kind ?? undefined}
-                    deadline={a.available_until ?? undefined}
+                    deadline={a.availability_end ?? undefined}
                     result={a.result || undefined}
                     score={a.score ?? undefined}
                     submittedAt={a.submitted_at ?? undefined}
@@ -250,7 +247,7 @@ export default function TasksPage() {
                         ? buildAcanthusSsoUrl(item.data.lms_course_id, lmsSystemTypes[item.data.lms_course_id] ?? '')
                         : undefined}
                       badge={item.data.kind ?? undefined}
-                      deadline={item.data.available_until ?? undefined}
+                      deadline={item.data.availability_end ?? undefined}
                       result={item.data.result || undefined}
                       score={item.data.score ?? undefined}
                       submittedAt={item.data.submitted_at ?? undefined}

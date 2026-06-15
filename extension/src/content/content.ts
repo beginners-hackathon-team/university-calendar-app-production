@@ -83,7 +83,6 @@ function formatUnixTs(ts: number): string | null {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-const LMS_TASK_KINDS = new Set(['レポート', '試験', '自習', '一問一答'])
 
 /* ── 認証 ───────────────────────────────────────────────── */
 
@@ -328,7 +327,7 @@ async function continueAllQImport(): Promise<void> {
     console.log(`[AllQ] total after dedup=${deduped.length}`)
 
     const allCourseItems = await buildCourseItems(deduped, liveYear, undefined, (current, total) => {
-      showOverlay(`授業詳細を取得中... ${current}/${total}`)
+      showOverlayWithHint(`授業詳細を取得中... ${current}/${total}`, '⚠ ページを閉じずにお待ちください')
     })
 
     const count = await importCoursesWithAuth(allCourseItems, liveYear, [1, 2, 3, 4])
@@ -340,6 +339,179 @@ async function continueAllQImport(): Promise<void> {
     const finalAppQuarter = finalTermSelect ? (QUARTER_MAP[parseInt(finalTermSelect.value)] ?? 4) : 4
     await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', quarter: finalAppQuarter })
   }
+}
+
+/* ── 授業一覧コンポーネント ─────────────────────────────── */
+
+async function appendCourseList(panel: HTMLElement): Promise<void> {
+  const toggleBtn = document.createElement('button')
+  toggleBtn.style.cssText = [
+    'display:flex', 'align-items:center', 'justify-content:space-between',
+    'width:100%', 'padding:7px 12px',
+    'background:rgba(255,255,255,0.04)', 'color:#94a3b8',
+    'border:none', 'border-top:1px solid rgba(255,255,255,0.1)',
+    'cursor:pointer', 'font-size:11px', 'font-weight:600',
+    'box-sizing:border-box',
+  ].join(';')
+  const toggleLabel = document.createElement('span')
+  toggleLabel.textContent = '授業一覧'
+  const arrowSpan = document.createElement('span')
+  panel.appendChild(toggleBtn)
+  toggleBtn.appendChild(toggleLabel)
+  toggleBtn.appendChild(arrowSpan)
+
+  const courseBody = document.createElement('div')
+  courseBody.style.cssText = 'padding:6px 10px 16px'
+  panel.appendChild(courseBody)
+
+  const qRow = document.createElement('div')
+  qRow.style.cssText = [
+    'display:flex', 'gap:3px',
+    'background:rgba(255,255,255,0.08)', 'border-radius:6px',
+    'padding:3px', 'margin-bottom:8px',
+  ].join(';')
+  const qBtns = {} as Record<QKey, HTMLButtonElement>
+  for (const q of QUARTERS_LIST) {
+    const b = document.createElement('button')
+    b.textContent = q
+    b.style.cssText = 'flex:1;padding:3px 0;border:none;border-radius:4px;cursor:pointer;font-size:11px'
+    qBtns[q] = b
+    qRow.appendChild(b)
+  }
+  courseBody.appendChild(qRow)
+
+  const listEl = document.createElement('div')
+  courseBody.appendChild(listEl)
+
+  let currentQ: QKey = getPanelCurrentQuarter()
+  let expanded = true
+  let courseCache: Partial<Record<QKey, PanelCourse[]>> = {}
+
+  function applyQStyles() {
+    for (const q of QUARTERS_LIST) {
+      const b = qBtns[q]
+      if (q === currentQ) {
+        b.style.background = 'white'
+        b.style.color = '#1d4ed8'
+        b.style.fontWeight = '600'
+        b.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)'
+      } else {
+        b.style.background = 'transparent'
+        b.style.color = '#94a3b8'
+        b.style.fontWeight = '400'
+        b.style.boxShadow = 'none'
+      }
+    }
+  }
+
+  function applyExpanded(val: boolean) {
+    courseBody.style.display = val ? 'block' : 'none'
+    arrowSpan.textContent = val ? '▲' : '▼'
+  }
+
+  function renderList(courses: PanelCourse[] | null, loading: boolean) {
+    listEl.innerHTML = ''
+    if (loading && !courses) {
+      const el = document.createElement('div')
+      el.style.cssText = 'font-size:11px;color:#64748b;text-align:center;padding:6px 0'
+      el.textContent = '読み込み中...'
+      listEl.appendChild(el)
+      return
+    }
+    if (!courses || courses.length === 0) {
+      const el = document.createElement('div')
+      el.style.cssText = 'font-size:11px;color:#64748b;padding:4px 0'
+      el.textContent = '授業がありません'
+      listEl.appendChild(el)
+      return
+    }
+    const sorted = courses
+      .filter(c => !c.is_intensive_lct && c.day_of_week)
+      .sort((a, b) => {
+        const da = PANEL_DAY_ORDER.indexOf(a.day_of_week!)
+        const db = PANEL_DAY_ORDER.indexOf(b.day_of_week!)
+        return da !== db ? da - db : a.period - b.period
+      })
+    const intensive = courses.filter(c => c.is_intensive_lct)
+    for (const c of [...sorted, ...intensive]) {
+      const lmsUrl = c.lms_course_id
+        ? `${ACANTHUS_SSO_BASE}?courseId=${c.lms_course_id}&systemType=${c.lms_system_type ?? ''}`
+        : null
+      const row = document.createElement('div')
+      row.style.cssText = [
+        'display:flex', 'align-items:center', 'gap:5px',
+        'padding:4px 2px', 'border-bottom:1px solid rgba(255,255,255,0.06)',
+        `font-size:11px;${lmsUrl ? 'cursor:pointer;color:#93c5fd' : 'color:#475569'}`,
+      ].join(';')
+      if (lmsUrl) {
+        const url = lmsUrl
+        row.addEventListener('click', () => { window.location.href = url })
+        row.addEventListener('mouseenter', () => { row.style.color = '#bfdbfe' })
+        row.addEventListener('mouseleave', () => { row.style.color = '#93c5fd' })
+      }
+      const labelEl = document.createElement('span')
+      labelEl.style.cssText = 'flex-shrink:0;min-width:22px;font-size:10px;opacity:0.65'
+      labelEl.textContent = c.is_intensive_lct ? '集中' : `${c.day_of_week}${c.period}`
+      const nameEl = document.createElement('span')
+      nameEl.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+      nameEl.textContent = c.name
+      row.appendChild(labelEl)
+      row.appendChild(nameEl)
+      listEl.appendChild(row)
+    }
+  }
+
+  async function loadQ(q: QKey) {
+    const cached = courseCache[q] ?? null
+    renderList(cached, !cached)
+
+    let token = await getStoredToken()
+    if (!token) token = await tryRefreshToken()
+    if (!token) {
+      if (!cached) renderList(null, false)
+      return
+    }
+    try {
+      const courses = await fetchPanelCourses(q, token)
+      courseCache[q] = courses
+      const s = await chrome.storage.local.get(['cachedCoursesByQuarter'])
+      const existing = (s['cachedCoursesByQuarter'] ?? {}) as Record<string, unknown>
+      chrome.storage.local.set({
+        cachedCoursesByQuarter: { ...existing, [q]: courses },
+        cachedCoursesUpdatedAt: new Date().toISOString(),
+      })
+      if (currentQ === q) renderList(courses, false)
+    } catch {
+      if (!cached && currentQ === q) renderList(null, false)
+    }
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    expanded = !expanded
+    applyExpanded(expanded)
+    chrome.storage.local.set({ courseListExpanded: expanded })
+  })
+
+  for (const q of QUARTERS_LIST) {
+    qBtns[q].addEventListener('click', async () => {
+      currentQ = q
+      chrome.storage.local.set({ selectedQuarter: q })
+      applyQStyles()
+      await loadQ(q)
+    })
+  }
+
+  const stored = await chrome.storage.local.get([
+    'selectedQuarter', 'courseListExpanded', 'cachedCoursesByQuarter',
+  ])
+  const storedQ = stored['selectedQuarter'] as QKey | undefined
+  if (storedQ && (QUARTERS_LIST as string[]).includes(storedQ)) currentQ = storedQ
+  if (typeof stored['courseListExpanded'] === 'boolean') expanded = stored['courseListExpanded'] as boolean
+  courseCache = (stored['cachedCoursesByQuarter'] as Partial<Record<QKey, PanelCourse[]>>) ?? {}
+
+  applyQStyles()
+  applyExpanded(expanded)
+  await loadQ(currentQ)
 }
 
 /* ── LMS サイドパネル ────────────────────────────────────── */
@@ -577,185 +749,15 @@ async function initLmsSidePanel(): Promise<void> {
     await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', path: '/tasks' })
   }))
 
-  // 授業一覧トグルヘッダー
-  const toggleBtn = document.createElement('button')
-  toggleBtn.style.cssText = [
-    'display:flex', 'align-items:center', 'justify-content:space-between',
-    'width:100%', 'padding:7px 12px',
-    'background:rgba(255,255,255,0.04)', 'color:#94a3b8',
-    'border:none', 'border-top:1px solid rgba(255,255,255,0.1)',
-    'cursor:pointer', 'font-size:11px', 'font-weight:600',
-    'box-sizing:border-box',
-  ].join(';')
-  const toggleLabel = document.createElement('span')
-  toggleLabel.textContent = '授業一覧'
-  const arrowSpan = document.createElement('span')
-  panel.appendChild(toggleBtn)
-  toggleBtn.appendChild(toggleLabel)
-  toggleBtn.appendChild(arrowSpan)
+  await appendCourseList(panel)
 
-  const courseBody = document.createElement('div')
-  courseBody.style.cssText = 'padding:6px 10px 16px'
-  panel.appendChild(courseBody)
-
-  // Q セレクタ
-  const qRow = document.createElement('div')
-  qRow.style.cssText = [
-    'display:flex', 'gap:3px',
-    'background:rgba(255,255,255,0.08)', 'border-radius:6px',
-    'padding:3px', 'margin-bottom:8px',
-  ].join(';')
-  const qBtns = {} as Record<QKey, HTMLButtonElement>
-  for (const q of QUARTERS_LIST) {
-    const b = document.createElement('button')
-    b.textContent = q
-    b.style.cssText = 'flex:1;padding:3px 0;border:none;border-radius:4px;cursor:pointer;font-size:11px'
-    qBtns[q] = b
-    qRow.appendChild(b)
-  }
-  courseBody.appendChild(qRow)
-
-  const listEl = document.createElement('div')
-  courseBody.appendChild(listEl)
-
-  // State
-  let currentQ: QKey = getPanelCurrentQuarter()
-  let expanded = true
-  let courseCache: Partial<Record<QKey, PanelCourse[]>> = {}
-
-  function applyQStyles() {
-    for (const q of QUARTERS_LIST) {
-      const b = qBtns[q]
-      if (q === currentQ) {
-        b.style.background = 'white'
-        b.style.color = '#1d4ed8'
-        b.style.fontWeight = '600'
-        b.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)'
-      } else {
-        b.style.background = 'transparent'
-        b.style.color = '#94a3b8'
-        b.style.fontWeight = '400'
-        b.style.boxShadow = 'none'
-      }
-    }
-  }
-
-  function applyExpanded(val: boolean) {
-    courseBody.style.display = val ? 'block' : 'none'
-    arrowSpan.textContent = val ? '▲' : '▼'
-  }
-
-  function renderList(courses: PanelCourse[] | null, loading: boolean) {
-    listEl.innerHTML = ''
-    if (loading && !courses) {
-      const el = document.createElement('div')
-      el.style.cssText = 'font-size:11px;color:#64748b;text-align:center;padding:6px 0'
-      el.textContent = '読み込み中...'
-      listEl.appendChild(el)
-      return
-    }
-    if (!courses || courses.length === 0) {
-      const el = document.createElement('div')
-      el.style.cssText = 'font-size:11px;color:#64748b;padding:4px 0'
-      el.textContent = '授業がありません'
-      listEl.appendChild(el)
-      return
-    }
-    const sorted = courses
-      .filter(c => !c.is_intensive_lct && c.day_of_week)
-      .sort((a, b) => {
-        const da = PANEL_DAY_ORDER.indexOf(a.day_of_week!)
-        const db = PANEL_DAY_ORDER.indexOf(b.day_of_week!)
-        return da !== db ? da - db : a.period - b.period
-      })
-    const intensive = courses.filter(c => c.is_intensive_lct)
-    for (const c of [...sorted, ...intensive]) {
-      const lmsUrl = c.lms_course_id
-        ? `${ACANTHUS_SSO_BASE}?courseId=${c.lms_course_id}&systemType=${c.lms_system_type ?? ''}`
-        : null
-      const row = document.createElement('div')
-      row.style.cssText = [
-        'display:flex', 'align-items:center', 'gap:5px',
-        'padding:4px 2px', 'border-bottom:1px solid rgba(255,255,255,0.06)',
-        `font-size:11px;${lmsUrl ? 'cursor:pointer;color:#93c5fd' : 'color:#475569'}`,
-      ].join(';')
-      if (lmsUrl) {
-        const url = lmsUrl
-        row.addEventListener('click', () => { window.location.href = url })
-        row.addEventListener('mouseenter', () => { row.style.color = '#bfdbfe' })
-        row.addEventListener('mouseleave', () => { row.style.color = '#93c5fd' })
-      }
-      const labelEl = document.createElement('span')
-      labelEl.style.cssText = 'flex-shrink:0;min-width:22px;font-size:10px;opacity:0.65'
-      labelEl.textContent = c.is_intensive_lct ? '集中' : `${c.day_of_week}${c.period}`
-      const nameEl = document.createElement('span')
-      nameEl.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
-      nameEl.textContent = c.name
-      row.appendChild(labelEl)
-      row.appendChild(nameEl)
-      listEl.appendChild(row)
-    }
-  }
-
-  async function loadQ(q: QKey) {
-    const cached = courseCache[q] ?? null
-    renderList(cached, !cached)
-
-    let token = await getStoredToken()
-    if (!token) token = await tryRefreshToken()
-    if (!token) {
-      if (!cached) renderList(null, false)
-      return
-    }
-    try {
-      const courses = await fetchPanelCourses(q, token)
-      courseCache[q] = courses
-      const s = await chrome.storage.local.get(['cachedCoursesByQuarter'])
-      const existing = (s['cachedCoursesByQuarter'] ?? {}) as Record<string, unknown>
-      chrome.storage.local.set({
-        cachedCoursesByQuarter: { ...existing, [q]: courses },
-        cachedCoursesUpdatedAt: new Date().toISOString(),
-      })
-      if (currentQ === q) renderList(courses, false)
-    } catch {
-      if (!cached && currentQ === q) renderList(null, false)
-    }
-  }
-
-  toggleBtn.addEventListener('click', () => {
-    expanded = !expanded
-    applyExpanded(expanded)
-    chrome.storage.local.set({ courseListExpanded: expanded })
-  })
-
-  for (const q of QUARTERS_LIST) {
-    qBtns[q].addEventListener('click', async () => {
-      currentQ = q
-      chrome.storage.local.set({ selectedQuarter: q })
-      applyQStyles()
-      await loadQ(q)
-    })
-  }
-
-  // ストレージから初期状態を復元
-  const stored = await chrome.storage.local.get([
-    'selectedQuarter', 'courseListExpanded', 'cachedCoursesByQuarter', 'panelPosition',
-  ])
-  const storedQ = stored['selectedQuarter'] as QKey | undefined
-  if (storedQ && (QUARTERS_LIST as string[]).includes(storedQ)) currentQ = storedQ
-  if (typeof stored['courseListExpanded'] === 'boolean') expanded = stored['courseListExpanded'] as boolean
-  courseCache = (stored['cachedCoursesByQuarter'] as Partial<Record<QKey, PanelCourse[]>>) ?? {}
-
-  const pos = stored['panelPosition'] as { left: string; top: string } | undefined
+  const storedPos = await chrome.storage.local.get(['panelPosition'])
+  const pos = storedPos['panelPosition'] as { left: string; top: string } | undefined
   if (pos?.left && pos?.top) {
     panel.style.right = 'auto'
     panel.style.left = pos.left
     panel.style.top = pos.top
   }
-
-  applyQStyles()
-  applyExpanded(expanded)
-  await loadQ(currentQ)
 }
 
 /* ── メイン処理 ─────────────────────────────────────────── */
@@ -833,7 +835,8 @@ function initOnDomReady() {
 
       const btn = makePanelActionBtn('今学期の時間割を登録', async () => {
         await ensureToken()
-        showOverlay('時間割を取得中...')
+        showOverlayWithHint('時間割を取得中...', '⚠ ページを閉じずにお待ちください')
+        portalPanel.style.display = 'none'
         try {
           const termSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlTerm')
           const yearSelect = document.querySelector<HTMLSelectElement>('#ctl00_phContents_ucRegistSearchList_ddlYear_ddl')
@@ -842,7 +845,9 @@ function initOnDomReady() {
           const liveAppQuarter = QUARTER_MAP[livePortalQuarter] ?? 1
 
           const parsed = parseRegisteredCourses(document.documentElement.outerHTML)
-          const courses = await buildCourseItems(parsed, liveYear, liveAppQuarter)
+          const courses = await buildCourseItems(parsed, liveYear, liveAppQuarter, (current, total) => {
+            showOverlayWithHint(`授業詳細を取得中... ${current}/${total}`, '⚠ ページを閉じずにお待ちください')
+          })
 
           showOverlay('アプリに同期中...')
           const count = await importCoursesWithAuth(courses, liveYear, [liveAppQuarter])
@@ -854,6 +859,7 @@ function initOnDomReady() {
 
           await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', quarter: liveAppQuarter })
         } catch (e) {
+          portalPanel.style.display = ''
           hideOverlay()
           throw e
         }
@@ -897,6 +903,8 @@ function initOnDomReady() {
       })
       portalPanel.appendChild(returnBtn)
 
+      void appendCourseList(portalPanel)
+
       // ポータルバグページからのリダイレクト後に保存されたアクションを自動実行
       const pendingAction = sessionStorage.getItem(PENDING_ACTION_KEY)
       if (pendingAction) {
@@ -935,7 +943,7 @@ function initOnDomReady() {
   }
 
   // LMS教材ページ（my-reportsページは除外）
-  const lmsCourseMatch = currentUrl.match(/\/course\.php\/([^/?#]+)\/?\?.*acs_=([^&#]+)/)
+  const lmsCourseMatch = currentUrl.match(/\/course\.php\/([^/?#]+)/)
   if (lmsCourseMatch && !currentUrl.includes('/my-reports')) {
     ;(async () => {
       const syncModeResult = await sendMessage<GetSyncModeResponse>({ type: 'GET_SYNC_MODE' })
@@ -955,15 +963,17 @@ function initOnDomReady() {
         const courseInfo = parseLmsCoursePage(html)
         if (!courseInfo) return null
         return courseInfo.contents
-          .filter(c => LMS_TASK_KINDS.has(c.kind) && c.id)
+          .filter(c => c.id || c.sourceUrl)
           .map(c => ({
-            lms_contents_id: c.id,
+            content_id: c.id,
+            source_url: c.sourceUrl,
             title: c.name,
             kind: c.kind,
+            course_id: courseInfo.courseId || null,
             course_name: courseInfo.courseName,
-            lms_course_id: courseInfo.courseId,
             available_from: formatUnixTs(c.startDate),
             available_until: formatUnixTs(c.endDate),
+            raw_text: c.rawText,
           }))
       }
 

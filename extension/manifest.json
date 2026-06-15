@@ -20,7 +20,7 @@
   "host_permissions": [
     "https://eduweb.sta.kanazawa-u.ac.jp/*",
     "https://lms-wc.el.kanazawa-u.ac.jp/*",
-    "https://ku-calendar-app.onrender.com/*",
+    "http://localhost:5173/*",
     "https://lzpofmjgptzfjhkiqbqp.supabase.co/*"
   ],
   "background": {
@@ -38,7 +38,7 @@
       "run_at": "document_start"
     },
     {
-      "matches": ["https://ku-calendar-app.onrender.com/*"],
+      "matches": ["http://localhost:5173/*"],
       "js": ["appContent.js"]
     }
   ]

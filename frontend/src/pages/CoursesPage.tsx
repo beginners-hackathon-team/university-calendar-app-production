@@ -281,7 +281,7 @@ function CourseCell({ course, compact = false }: { course: Course; compact?: boo
         </div>
       )}
       {course.room && (
-        <div className="text-[10.5px] leading-tight" style={{ color: 'var(--c-text-3)' }}>
+        <div className="text-[10.5px] leading-tight" style={{ color: 'var(--c-text-2)' }}>
           {course.room}
         </div>
       )}

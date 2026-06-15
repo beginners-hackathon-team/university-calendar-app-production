@@ -1,7 +1,9 @@
 export interface ParsedLmsContent {
-  id: string
+  id: string | null
   name: string
-  kind: string       // "資料" | "レポート" | "試験" | "自習" | "一問一答" | etc.
+  kind: string | null
+  sourceUrl: string | null
+  rawText: string | null
   folderId: string
   folderName: string
   startDate: number  // unix timestamp (0 = 未設定)
@@ -11,7 +13,7 @@ export interface ParsedLmsContent {
 
 export interface ParsedLmsCourse {
   courseId: string
-  courseName: string
+  courseName: string | null
   contents: ParsedLmsContent[]
 }
 
@@ -23,7 +25,7 @@ export function parseLmsCoursePage(html: string): ParsedLmsCourse | null {
 
   const courseHref = courseLink.getAttribute('href') ?? ''
   const courseId = courseHref.match(/\/course\.php\/([^/?#]+)/)?.[1] ?? ''
-  const courseName = courseLink.textContent?.trim() ?? doc.title
+  const courseName = courseLink.textContent?.trim() || null
 
   const contents: ParsedLmsContent[] = []
 
@@ -32,10 +34,14 @@ export function parseLmsCoursePage(html: string): ParsedLmsCourse | null {
     const folderName = folder.querySelector('.panel-title')?.textContent?.trim() ?? ''
 
     folder.querySelectorAll('[data-contents-id]').forEach(item => {
+      const kindText = item.querySelector('.cl-contentsList_categoryLabel')?.textContent?.trim()
+      const link = item.querySelector('a') as HTMLAnchorElement | null
       contents.push({
-        id: item.getAttribute('data-contents-id') ?? '',
+        id: item.getAttribute('data-contents-id') || null,
         name: item.getAttribute('data-contents-name') ?? '',
-        kind: item.querySelector('.cl-contentsList_categoryLabel')?.textContent?.trim() ?? '',
+        kind: kindText || null,
+        sourceUrl: link?.getAttribute('href') || null,
+        rawText: item.textContent?.trim() || null,
         folderId,
         folderName,
         startDate: parseInt(item.getAttribute('data-start-date') ?? '0'),
