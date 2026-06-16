@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "金沢大学カレンダー同期",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "金沢大学ポータルとWebClass LMSから履修情報・課題情報を取得し、KU Calendarに同期します。",
   "permissions": ["storage", "tabs"],
   "icons": {

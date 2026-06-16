@@ -10,6 +10,7 @@ import type {
   ReturnToAppResponse,
   RefreshTokenResponse,
   GetSyncModeResponse,
+  FetchAppApiResponse,
 } from '../shared/messages'
 import { postToBackend, importCourses, importAssignments, importLmsTasks } from '../shared/api'
 
@@ -30,6 +31,7 @@ type AnyResponse =
   | OpenLmsTabResponse
   | OpenPortalTabResponse
   | ReturnToAppResponse
+  | FetchAppApiResponse
   | RefreshTokenResponse
   | GetSyncModeResponse
 
@@ -171,8 +173,10 @@ chrome.runtime.onMessage.addListener(
       ;(async () => {
         // トークン取得（なければ refresh を試みる）
         let token = ((await chrome.storage.local.get(['access_token']))['access_token'] as string | undefined) ?? null
+        console.log('[background] GET_SYNC_MODE: token exists=', !!token)
         if (!token) {
           token = await refreshAccessToken()
+          console.log('[background] GET_SYNC_MODE: after refresh, token exists=', !!token)
           if (!token) { sendResponse({ success: false, auth_required: true }); return }
         }
 
@@ -180,16 +184,19 @@ chrome.runtime.onMessage.addListener(
           const res = await fetch(`${APP_URL}/api/me`, {
             headers: { 'Authorization': `Bearer ${t}` },
           })
+          console.log('[background] GET_SYNC_MODE: /api/me status=', res.status)
           if (res.status === 401 || res.status === 403) {
             throw Object.assign(new Error('auth'), { isAuth: true })
           }
           if (!res.ok) throw new Error(`/api/me failed: ${res.status}`)
           const data = await res.json() as { assignment_sync_mode?: string }
+          console.log('[background] GET_SYNC_MODE: assignment_sync_mode=', data.assignment_sync_mode)
           return data.assignment_sync_mode === 'manual' ? 'manual' : 'auto'
         }
 
         try {
           const mode = await fetchMode(token)
+          console.log('[background] GET_SYNC_MODE: responding mode=', mode)
           sendResponse({ success: true, mode })
         } catch (e: unknown) {
           if (e instanceof Error && (e as Error & { isAuth?: boolean }).isAuth) {
@@ -198,14 +205,35 @@ chrome.runtime.onMessage.addListener(
             if (!newToken) { sendResponse({ success: false, auth_required: true }); return }
             try {
               const mode = await fetchMode(newToken)
+              console.log('[background] GET_SYNC_MODE: retry responding mode=', mode)
               sendResponse({ success: true, mode })
             } catch {
               sendResponse({ success: false, auth_required: true })
             }
           } else {
             // ネットワークエラー等: デフォルト 'auto' を返す
+            console.warn('[background] GET_SYNC_MODE: network error, defaulting to auto', e)
             sendResponse({ success: true, mode: 'auto' })
           }
+        }
+      })()
+      return true
+    }
+
+    if (message.type === 'FETCH_APP_API') {
+      ;(async () => {
+        const stored = await chrome.storage.local.get(['access_token'])
+        const token = (stored['access_token'] as string | undefined) ?? null
+        if (!token) { sendResponse({ success: false, status: 401, error: 'no token' }); return }
+        try {
+          const res = await fetch(`${APP_URL}${message.path}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (!res.ok) { sendResponse({ success: false, status: res.status, error: `${res.status}` }); return }
+          const data = await res.json()
+          sendResponse({ success: true, data })
+        } catch (e) {
+          sendResponse({ success: false, error: String(e) })
         }
       })()
       return true
@@ -220,7 +248,12 @@ chrome.runtime.onMessage.addListener(
 
         const returnUrl = message.path
           ? (() => { const u = new URL(savedAppUrl); u.pathname = message.path!; return u.toString() })()
-          : (() => { const u = new URL(savedAppUrl); u.pathname = '/courses'; return u.toString() })()
+          : (() => {
+              const u = new URL(savedAppUrl)
+              u.pathname = '/courses'
+              if (message.quarter != null) u.searchParams.set('returnQuarter', String(message.quarter))
+              return u.toString()
+            })()
 
         const closePortal = () => {
           if (portalTabId !== null) chrome.tabs.remove(portalTabId)

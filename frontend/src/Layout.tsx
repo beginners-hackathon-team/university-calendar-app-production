@@ -116,11 +116,13 @@ export default function Layout() {
   const handleSetSyncMode = async (mode: 'auto' | 'manual') => {
     setSyncMode(mode);
     await updateAssignmentSyncMode(mode);
+    console.log('[syncMode] updated to:', mode);
   };
 
   useEffect(() => {
     if (me?.assignment_sync_mode) {
       setSyncMode(me.assignment_sync_mode);
+      console.log('[syncMode] loaded from DB:', me.assignment_sync_mode);
     }
   }, [me?.assignment_sync_mode]);
 

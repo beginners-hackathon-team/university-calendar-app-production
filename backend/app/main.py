@@ -1198,9 +1198,17 @@ def privacy_policy():
 # 静的ファイル配信（本番のみ）
 STATIC_DIR = Path(__file__).parent.parent / "static"
 if STATIC_DIR.exists():
+
+    class ImmutableStaticFiles(StaticFiles):
+        # ファイル名にハッシュが入っているため長期キャッシュして問題ない
+        def file_response(self, *args, **kwargs):
+            response = super().file_response(*args, **kwargs)
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
+
     app.mount(
         "/assets",
-        StaticFiles(directory=STATIC_DIR / "assets"),
+        ImmutableStaticFiles(directory=STATIC_DIR / "assets"),
         name="assets",
     )
 
@@ -1210,5 +1218,7 @@ if STATIC_DIR.exists():
             raise HTTPException(status_code=404)
         index = STATIC_DIR / "index.html"
         if index.exists():
-            return FileResponse(index)
+            # index.html は assets への参照を持つため、常にブラウザに再検証させる
+            # （拡張機能からの遷移がヒューリスティックキャッシュの古いHTMLを掴んでしまう不具合の対策）
+            return FileResponse(index, headers={"Cache-Control": "no-cache"})
         raise HTTPException(status_code=404)

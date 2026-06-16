@@ -47,7 +47,10 @@ export default function CoursesPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.has('returnQuarter')) {
+    const rq = params.get('returnQuarter');
+    if (rq) {
+      const q = parseInt(rq, 10);
+      if (q >= 1 && q <= 4) setSelectedQuarter(q);
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);

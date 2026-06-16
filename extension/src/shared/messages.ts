@@ -107,6 +107,18 @@ export interface GetSyncModeResponse {
   error?: string
 }
 
+export interface FetchAppApiMessage {
+  type: 'FETCH_APP_API'
+  path: string
+}
+
+export interface FetchAppApiResponse {
+  success: boolean
+  data?: unknown
+  status?: number
+  error?: string
+}
+
 export type Message =
   | FetchUrlMessage
   | PostToBackendMessage
@@ -118,6 +130,7 @@ export type Message =
   | ReturnToAppMessage
   | RefreshTokenMessage
   | GetSyncModeMessage
+  | FetchAppApiMessage
 
 export interface FetchUrlResponse {
   success: boolean

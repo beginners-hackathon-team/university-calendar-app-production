@@ -16,6 +16,8 @@ import type {
   RefreshTokenResponse,
   GetSyncModeMessage,
   GetSyncModeResponse,
+  FetchAppApiMessage,
+  FetchAppApiResponse,
 } from '../shared/messages'
 import { parseRegisteredCourses, type ParsedCourse } from '../parsers/registParser'
 import { parseSyllabusDetail } from '../parsers/syllabusParser'
@@ -60,7 +62,7 @@ const OVERLAY_BASE_STYLE = [
 const QUARTER_MAP: Record<number, number> = { 11: 1, 12: 2, 21: 3, 22: 4 }
 const DAY_STR_MAP: Record<number, string> = { 1: '月', 2: '火', 3: '水', 4: '木', 5: '金', 6: '土' }
 
-function sendMessage<T>(message: FetchUrlMessage | ImportCoursesMessage | ImportLmsTasksMessage | OpenLmsTabMessage | ReturnToAppMessage | RefreshTokenMessage | GetSyncModeMessage): Promise<T> {
+function sendMessage<T>(message: FetchUrlMessage | ImportCoursesMessage | ImportLmsTasksMessage | OpenLmsTabMessage | ReturnToAppMessage | RefreshTokenMessage | GetSyncModeMessage | FetchAppApiMessage): Promise<T> {
   return new Promise(resolve => chrome.runtime.sendMessage(message, resolve))
 }
 
@@ -465,14 +467,8 @@ async function appendCourseList(panel: HTMLElement): Promise<void> {
     const cached = courseCache[q] ?? null
     renderList(cached, !cached)
 
-    let token = await getStoredToken()
-    if (!token) token = await tryRefreshToken()
-    if (!token) {
-      if (!cached) renderList(null, false)
-      return
-    }
     try {
-      const courses = await fetchPanelCourses(q, token)
+      const courses = await fetchPanelCourses(q)
       courseCache[q] = courses
       const s = await chrome.storage.local.get(['cachedCoursesByQuarter'])
       const existing = (s['cachedCoursesByQuarter'] ?? {}) as Record<string, unknown>
@@ -514,6 +510,25 @@ async function appendCourseList(panel: HTMLElement): Promise<void> {
   await loadQ(currentQ)
 }
 
+/* ── LMSコンテンツ描画待ち ──────────────────────────────── */
+
+function waitForCourseContent(timeout = 15000): Promise<boolean> {
+  if (document.querySelector('[data-folder-id]')) return Promise.resolve(true)
+  return new Promise(resolve => {
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('[data-folder-id]')) {
+        observer.disconnect()
+        resolve(true)
+      }
+    })
+    observer.observe(document.documentElement, { childList: true, subtree: true })
+    setTimeout(() => {
+      observer.disconnect()
+      resolve(false)
+    }, timeout)
+  })
+}
+
 /* ── LMS サイドパネル ────────────────────────────────────── */
 
 const LMS_PANEL_ID = '__extSidePanel'
@@ -544,12 +559,13 @@ function getPanelCurrentQuarter(): QKey {
   return 'Q4'
 }
 
-async function fetchPanelCourses(q: QKey, token: string): Promise<PanelCourse[]> {
-  const res = await fetch(`${APP_URL}/api/courses/${PANEL_CURRENT_YEAR}-${PANEL_QUARTER_NUM[q]}`, {
-    headers: { Authorization: `Bearer ${token}` },
+async function fetchPanelCourses(q: QKey): Promise<PanelCourse[]> {
+  const res = await sendMessage<FetchAppApiResponse>({
+    type: 'FETCH_APP_API',
+    path: `/api/courses/${PANEL_CURRENT_YEAR}-${PANEL_QUARTER_NUM[q]}`,
   })
-  if (!res.ok) throw new Error(`${res.status}`)
-  return res.json() as Promise<PanelCourse[]>
+  if (!res.success) throw new Error(res.error ?? String(res.status))
+  return res.data as PanelCourse[]
 }
 
 function makePanelNavBtn(label: string, onClick: () => Promise<void>): HTMLButtonElement {
@@ -879,7 +895,7 @@ function initOnDomReady() {
           startUrl.searchParams.delete('targetTerm')
           history.replaceState(null, '', startUrl.toString())
         }
-        sessionStorage.removeItem('targetTerm')
+        sessionStorage.removeItem('ku-extension-target-term-handled')
 
         sessionStorage.setItem(ALL_Q_IMPORT_KEY, JSON.stringify({
           quarters: ALL_PORTAL_QUARTERS,
@@ -985,23 +1001,39 @@ function initOnDomReady() {
         const CACHE_KEY = 'autoSyncedCourses'
         const TTL = 5 * 60 * 1000
 
-        const cacheResult = await chrome.storage.session.get([CACHE_KEY])
+        const cacheResult = await chrome.storage.local.get([CACHE_KEY])
         const cache = (cacheResult[CACHE_KEY] ?? {}) as Record<string, number>
         const lastSync = cache[courseId]
-        if (lastSync && Date.now() - lastSync < TTL) return
+        if (lastSync && Date.now() - lastSync < TTL) {
+          console.log(`[extension] auto-sync skipped (TTL): courseId=${courseId} lastSync=${new Date(lastSync).toISOString()}`)
+          return
+        }
 
         try {
           await ensureToken()
+          const contentReady = await waitForCourseContent()
+          console.log(`[extension] auto-sync: content ready=${contentReady} courseId=${courseId}`)
+          if (!contentReady) {
+            console.warn('[extension] auto-sync: course content did not appear within timeout, skipping')
+            return
+          }
           const tasks = buildTasks()
-          if (!tasks || tasks.length === 0) return
+          console.log(`[extension] auto-sync buildTasks: courseId=${courseId} tasks=${tasks?.length ?? 'null'}`)
+          if (!tasks || tasks.length === 0) {
+            console.log('[extension] auto-sync: no tasks found, skipping')
+            return
+          }
 
           await importLmsTasksWithAuth(tasks)
 
           cache[courseId] = Date.now()
-          chrome.storage.session.set({ [CACHE_KEY]: cache })
+          chrome.storage.local.set({ [CACHE_KEY]: cache })
           console.log(`[extension] auto-synced ${tasks.length} tasks for courseId=${courseId}`)
         } catch (e) {
-          if (e instanceof AuthRequiredError) return // 未ログイン: サイレントに終了
+          if (e instanceof AuthRequiredError) {
+            console.log('[extension] auto-sync: auth required, skipping')
+            return
+          }
           console.error('[extension] auto-sync error:', e)
         }
       } else {
