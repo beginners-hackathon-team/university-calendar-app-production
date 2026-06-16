@@ -1218,7 +1218,9 @@ if STATIC_DIR.exists():
             raise HTTPException(status_code=404)
         index = STATIC_DIR / "index.html"
         if index.exists():
-            # index.html は assets への参照を持つため、常にブラウザに再検証させる
-            # （拡張機能からの遷移がヒューリスティックキャッシュの古いHTMLを掴んでしまう不具合の対策）
-            return FileResponse(index, headers={"Cache-Control": "no-cache"})
+            # index.html は assets への参照を持つため毎回必ずネットワークから取得させる。
+            # no-cache では back-forward cache (bfcache) 対象から外れないため、
+            # 拡張機能の chrome.tabs.update で使い回されるタブが古いページを
+            # bfcacheから復元してしまう余地が残る。no-store で確実に防ぐ。
+            return FileResponse(index, headers={"Cache-Control": "no-store"})
         raise HTTPException(status_code=404)

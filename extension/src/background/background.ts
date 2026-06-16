@@ -246,14 +246,18 @@ chrome.runtime.onMessage.addListener(
         const savedAppTabId = (result['appTabId'] as number | undefined) ?? null
         const savedAppUrl = (result['appUrl'] as string | undefined) || APP_URL
 
-        const returnUrl = message.path
-          ? (() => { const u = new URL(savedAppUrl); u.pathname = message.path!; return u.toString() })()
-          : (() => {
-              const u = new URL(savedAppUrl)
-              u.pathname = '/courses'
-              if (message.quarter != null) u.searchParams.set('returnQuarter', String(message.quarter))
-              return u.toString()
-            })()
+        const u = message.path
+          ? new URL(message.path, savedAppUrl)
+          : new URL('/courses', savedAppUrl)
+        if (!message.path && message.quarter != null) {
+          u.searchParams.set('returnQuarter', String(message.quarter))
+        }
+        // 既存タブを使い回す際、古いページがbfcache等から復元されるのを防ぐためのキャッシュバスター
+        u.searchParams.set('fromExtension', '1')
+        u.searchParams.set('t', String(Date.now()))
+        const returnUrl = u.toString()
+
+        console.log('[background] RETURN_TO_APP: returnUrl=', returnUrl, 'savedAppTabId=', savedAppTabId)
 
         const closePortal = () => {
           if (portalTabId !== null) chrome.tabs.remove(portalTabId)
@@ -263,17 +267,26 @@ chrome.runtime.onMessage.addListener(
         if (savedAppTabId !== null) {
           chrome.tabs.get(savedAppTabId, tab => {
             if (chrome.runtime.lastError || !tab) {
+              console.log('[background] RETURN_TO_APP: saved tab not found, creating new tab')
               chrome.tabs.create({ url: returnUrl })
+              closePortal()
             } else {
+              console.log('[background] RETURN_TO_APP: tabs.update executing on tabId=', savedAppTabId)
               chrome.tabs.update(savedAppTabId, { url: returnUrl, active: true }, t => {
                 if (t?.windowId != null) {
                   chrome.windows.update(t.windowId, { focused: true })
                 }
+                // 既存タブの再利用時は、古いSPAの状態・bfcache・キャッシュ済みJS/CSSが
+                // 残っている可能性があるため、updateの完了を待って強制リロードする
+                console.log('[background] RETURN_TO_APP: tabs.reload(bypassCache=true) executing on tabId=', savedAppTabId)
+                chrome.tabs.reload(savedAppTabId, { bypassCache: true }, () => {
+                  closePortal()
+                })
               })
             }
-            closePortal()
           })
         } else {
+          console.log('[background] RETURN_TO_APP: no saved tab, creating new tab')
           chrome.tabs.create({ url: returnUrl })
           closePortal()
         }
