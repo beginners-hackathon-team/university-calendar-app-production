@@ -29,6 +29,13 @@ type Props = {
   onDeleteTodo: (id: string) => void;
   onDeleteAssignment: (id: string) => void;
   onResizeColumns: (a: ColumnKey, b: ColumnKey, shareA: number, shareB: number) => void;
+  onMoveAssignmentToTodo: (id: string) => void;
+  onMoveAssignmentToDone: (id: string) => void;
+  onMoveTodoAssignmentToAssignment: (id: string) => void;
+  onMoveTodoToDone: (id: string) => void;
+  onMoveDoneAssignmentToAssignment: (id: string) => void;
+  onMoveDoneAssignmentToTodo: (id: string) => void;
+  onMoveDoneTodoToTodo: (id: string) => void;
 };
 
 export default function KanbanBoard(props: Props) {
@@ -207,6 +214,9 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         gripProps={slot.gripProps}
         highlighted={highlighted}
         onSortModeChange={props.onAssignmentSortModeChange}
+        onChangeTitle={props.onChangeAssignmentTitle}
+        onMoveToTodo={props.onMoveAssignmentToTodo}
+        onMoveToDone={props.onMoveAssignmentToDone}
       />
     );
   }
@@ -229,6 +239,9 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         onCreateTodoBelow={props.onCreateTodoBelow}
         onCreateTodoBefore={props.onCreateTodoBefore}
         onDeleteTodo={props.onDeleteTodo}
+        onMoveAssignmentToAssignment={props.onMoveTodoAssignmentToAssignment}
+        onMoveAssignmentToDone={props.onMoveAssignmentToDone}
+        onMoveTodoToDone={props.onMoveTodoToDone}
       />
     );
   }
@@ -244,6 +257,10 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
       highlighted={highlighted}
       onDeleteTodo={props.onDeleteTodo}
       onDeleteAssignment={props.onDeleteAssignment}
+      onMoveAssignmentToAssignment={props.onMoveDoneAssignmentToAssignment}
+      onMoveAssignmentToTodo={props.onMoveDoneAssignmentToTodo}
+      onMoveTodoToTodo={props.onMoveDoneTodoToTodo}
+      onChangeAssignmentTitle={props.onChangeAssignmentTitle}
     />
   );
 }

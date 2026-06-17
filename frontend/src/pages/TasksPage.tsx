@@ -10,7 +10,19 @@ import {
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
+  type Modifier,
 } from '@dnd-kit/core';
+
+// ドラッグ中のオーバーレイチップをカーソル位置に合わせるモディファイア。
+// dnd-kit デフォルトはドラッグ元の左上に配置するため、掴んだ位置にオフセットを加える。
+const snapToPointerModifier: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
+  if (!activatorEvent || !draggingNodeRect) return transform;
+  const event = activatorEvent as PointerEvent;
+  if (typeof event.clientX !== 'number') return transform;
+  const offsetX = event.clientX - draggingNodeRect.left;
+  const offsetY = event.clientY - draggingNodeRect.top;
+  return { ...transform, x: transform.x + offsetX, y: transform.y + offsetY };
+};
 import { arrayMove } from '@dnd-kit/sortable';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import type { Assignment, Todo } from '../api/tasks';
@@ -33,20 +45,27 @@ import {
   type TodoColumnItem,
   type TodoViewMode,
   DEFAULT_COLUMN_SHARE,
+  applyAssignmentColumnOrder,
+  applyDoneColumnOrder,
   applyTodoColumnOrder,
   columnLabels,
+  doneColumnItemKey,
   getDoneTime,
+  loadAssignmentColumnOrder,
   loadAssignmentSortMode,
   loadBoardOrder,
   loadBoardVisible,
   loadColumnShares,
+  loadDoneColumnOrder,
   loadTodoColumnAssignmentIds,
   loadTodoColumnOrder,
   loadTodoViewMode,
+  saveAssignmentColumnOrder,
   saveAssignmentSortMode,
   saveBoardOrder,
   saveBoardVisible,
   saveColumnShares,
+  saveDoneColumnOrder,
   saveTodoColumnAssignmentIds,
   saveTodoColumnOrder,
   saveTodoViewMode,
@@ -88,6 +107,10 @@ export default function TasksPage() {
   const [todoColumnOrder, setTodoColumnOrder] = useState<string[]>(loadTodoColumnOrder);
   // TODOカラムの表示モード（リスト / テキスト）。
   const [todoViewMode, setTodoViewMode] = useState<TodoViewMode>(loadTodoViewMode);
+  // 課題カラムの手動並び順（ID配列）。ソートモード変更時にリセット。
+  const [assignmentColumnOrder, setAssignmentColumnOrder] = useState<string[]>(loadAssignmentColumnOrder);
+  // 完了カラムの手動並び順（"kind:id" キー配列）。
+  const [doneColumnOrder, setDoneColumnOrder] = useState<string[]>(loadDoneColumnOrder);
 
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [dropTargetColumn, setDropTargetColumn] = useState<ColumnKey | null>(null);
@@ -138,11 +161,17 @@ export default function TasksPage() {
     [pendingAssignments, todoAssignmentIds],
   );
 
-  // 課題カラムに表示する課題（TODOへ送ったものは除外）。
+  // 課題カラムに表示する課題（TODOへ送ったものは除外、手動並び順を適用）。
   const assignmentColumnItems = useMemo(
-    () => pendingAssignments.filter(a => !todoAssignmentIds.includes(a.id)),
-    [pendingAssignments, todoAssignmentIds],
+    () => applyAssignmentColumnOrder(
+      pendingAssignments.filter(a => !todoAssignmentIds.includes(a.id)),
+      assignmentColumnOrder,
+      assignmentSortMode,
+    ),
+    [pendingAssignments, todoAssignmentIds, assignmentColumnOrder, assignmentSortMode],
   );
+  const assignmentColumnItemsRef = useRef<typeof assignmentColumnItems>([]);
+  assignmentColumnItemsRef.current = assignmentColumnItems;
 
   const pendingTodos = useMemo(() => todos.filter(t => !t.is_done), [todos]);
 
@@ -159,11 +188,14 @@ export default function TasksPage() {
   todoColumnItemsRef.current = todoColumnItems;
 
   const doneItems = useMemo<DoneItem[]>(() => {
-    return [
+    const raw: DoneItem[] = [
       ...assignments.filter(a => a.is_done).map(a => ({ kind: 'assignment' as const, data: a })),
       ...todos.filter(t => t.is_done).map(t => ({ kind: 'todo' as const, data: t })),
     ].sort((a, b) => getDoneTime(b) - getDoneTime(a));
-  }, [assignments, todos]);
+    return applyDoneColumnOrder(raw, doneColumnOrder);
+  }, [assignments, todos, doneColumnOrder]);
+  const doneColumnItemsRef = useRef<DoneItem[]>([]);
+  doneColumnItemsRef.current = doneItems;
 
   const visibleOrder = useMemo(() => order.filter(key => visible[key]), [order, visible]);
 
@@ -186,6 +218,8 @@ export default function TasksPage() {
   const handleAssignmentSortChange = (mode: AssignmentSortMode) => {
     setAssignmentSortMode(mode);
     saveAssignmentSortMode(mode);
+    setAssignmentColumnOrder([]);
+    saveAssignmentColumnOrder([]);
   };
 
   const toggleColumn = (key: ColumnKey) => {
@@ -206,17 +240,28 @@ export default function TasksPage() {
 
   // ---- 課題 ⇄ TODOカラムの所属管理 ------------------------------------
 
-  const addAssignmentToTodoColumn = (id: string) => {
+  // insertBeforeKey が指定された場合はその直前に挿入、省略時は末尾に追加。
+  const addAssignmentToTodoColumn = (id: string, insertBeforeKey?: string) => {
     setTodoAssignmentIds(prev => {
       if (prev.includes(id)) return prev;
       const next = [...prev, id];
       saveTodoColumnAssignmentIds(next);
       return next;
     });
-    setTodoColumnOrder(prev => {
+    setTodoColumnOrder(() => {
       const key = `assignment:${id}`;
-      if (prev.includes(key)) return prev;
-      const next = [...prev, key];
+      const currentKeys = todoColumnItemsRef.current.map(todoColumnItemKey);
+      if (currentKeys.includes(key)) return currentKeys;
+      if (insertBeforeKey) {
+        const to = currentKeys.indexOf(insertBeforeKey);
+        if (to >= 0) {
+          const next = [...currentKeys];
+          next.splice(to, 0, key);
+          saveTodoColumnOrder(next);
+          return next;
+        }
+      }
+      const next = [...currentKeys, key];
       saveTodoColumnOrder(next);
       return next;
     });
@@ -406,7 +451,115 @@ export default function TasksPage() {
     }
   };
 
+  // ---- ボタン操作ハンドラ --------------------------------------------
+
+  // 課題カラム: Todo→
+  const handleMoveAssignmentToTodo = (id: string) => {
+    addAssignmentToTodoColumn(id);
+  };
+
+  // 課題カラム / Todoカラム: 完了→ (課題)
+  const handleMoveAssignmentToDone = (id: string) => {
+    insertIntoDoneColumn(`assignment:${id}`);
+    void setAssignmentDone(id, true);
+  };
+
+  // Todoカラム内の課題: ←課題
+  const handleMoveTodoAssignmentToAssignment = (id: string) => {
+    removeAssignmentFromTodoColumn(id);
+    insertIntoAssignmentColumn(id);
+  };
+
+  // Todoカラム: 完了→ (Todo)
+  const handleMoveTodoToDone = (id: string) => {
+    insertIntoDoneColumn(`todo:${id}`);
+    void handleToggleTodoDone(id, true);
+  };
+
+  // 完了カラムの課題: ←課題
+  const handleMoveDoneAssignmentToAssignment = (id: string) => {
+    void setAssignmentDone(id, false);
+    removeAssignmentFromTodoColumn(id);
+    insertIntoAssignmentColumn(id);
+  };
+
+  // 完了カラムの課題: ←Todo
+  const handleMoveDoneAssignmentToTodo = (id: string) => {
+    void setAssignmentDone(id, false);
+    addAssignmentToTodoColumn(id);
+  };
+
+  // 完了カラムのTodo: ←Todo
+  const handleMoveDoneTodoToTodo = (id: string) => {
+    void handleToggleTodoDone(id, false);
+  };
+
   // ---- DnD ----------------------------------------------------------
+
+  // 課題カラム内の並び替え（deadline-asc モードのみ永続化）。
+  const reorderAssignmentColumn = (activeId: string, overData: Record<string, unknown> | undefined) => {
+    const overId = overData?.id as string | undefined;
+    if (!overId || activeId === overId) return;
+    const ids = assignmentColumnItemsRef.current.map(a => a.id);
+    const from = ids.indexOf(activeId);
+    const to = ids.indexOf(overId);
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(ids, from, to);
+    setAssignmentColumnOrder(next);
+    saveAssignmentColumnOrder(next);
+  };
+
+  // 課題カラムへの位置指定挿入（他カラムから戻ってきたとき）。
+  const insertIntoAssignmentColumn = (id: string, insertBeforeId?: string) => {
+    const currentIds = assignmentColumnItemsRef.current.map(a => a.id);
+    if (insertBeforeId) {
+      const to = currentIds.indexOf(insertBeforeId);
+      if (to >= 0) {
+        const next = [...currentIds];
+        next.splice(to, 0, id);
+        setAssignmentColumnOrder(next);
+        saveAssignmentColumnOrder(next);
+        return;
+      }
+    }
+    const next = [...currentIds, id];
+    setAssignmentColumnOrder(next);
+    saveAssignmentColumnOrder(next);
+  };
+
+  // 完了カラム内の並び替え。
+  const reorderDoneColumn = (activeKey: string, overData: Record<string, unknown> | undefined) => {
+    const overDoneKind = overData?.doneKind as string | undefined;
+    const overId = overData?.id as string | undefined;
+    if (!overDoneKind || !overId) return;
+    const overKey = `${overDoneKind}:${overId}`;
+    if (activeKey === overKey) return;
+    const keys = doneColumnItemsRef.current.map(doneColumnItemKey);
+    const from = keys.indexOf(activeKey);
+    const to = keys.indexOf(overKey);
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(keys, from, to);
+    setDoneColumnOrder(next);
+    saveDoneColumnOrder(next);
+  };
+
+  // 完了カラムへの位置指定挿入（他カラムから来たとき）。
+  const insertIntoDoneColumn = (newKey: string, insertBeforeKey?: string) => {
+    const currentKeys = doneColumnItemsRef.current.map(doneColumnItemKey);
+    if (insertBeforeKey) {
+      const to = currentKeys.indexOf(insertBeforeKey);
+      if (to >= 0) {
+        const next = [...currentKeys];
+        next.splice(to, 0, newKey);
+        setDoneColumnOrder(next);
+        saveDoneColumnOrder(next);
+        return;
+      }
+    }
+    const next = [...currentKeys, newKey];
+    setDoneColumnOrder(next);
+    saveDoneColumnOrder(next);
+  };
 
   const reorderTodoColumn = (activeKey: string, overData: Record<string, unknown> | undefined) => {
     const overType = overData?.type as 'todo' | 'assignment' | undefined;
@@ -459,54 +612,93 @@ export default function TasksPage() {
       return;
     }
 
-    // 課題カラムの課題: TODOへ移動できる / 完了へ移動できる（確認モーダルなし）。
+    // 課題カラムの課題: TODOへ移動、完了へ移動、カラム内並び替え
     if (active.type === 'assignment') {
       const { id, column: sourceColumn } = active;
+
       if (targetColumn === 'done') {
         void setAssignmentDone(id, true);
+        const insertBeforeKey = overData?.type === 'done'
+          ? `${overData.doneKind as string}:${overData.id as string}`
+          : undefined;
+        insertIntoDoneColumn(`assignment:${id}`, insertBeforeKey);
         return;
       }
+
       if (targetColumn === 'todo') {
         if (sourceColumn !== 'todo') {
-          addAssignmentToTodoColumn(id);
+          const insertBeforeKey = (overData?.type === 'todo' || overData?.type === 'assignment')
+            ? `${overData.type as string}:${overData.id as string}`
+            : undefined;
+          addAssignmentToTodoColumn(id, insertBeforeKey);
         } else if (overData?.type === 'todo' || overData?.type === 'assignment') {
           reorderTodoColumn(`assignment:${id}`, overData);
         }
         return;
       }
-      // TODOカラム内の課題は課題カラムへ戻せる。課題カラム内では同列ドロップ＝何もしない。
-      if (targetColumn === 'assignment' && sourceColumn === 'todo') {
-        removeAssignmentFromTodoColumn(id);
-      }
-      return;
-    }
 
-    // TODOカラムのTODO: 完了へ移動できる。課題カラムへは移動できない。
-    if (active.type === 'todo') {
-      const { id } = active;
-      if (targetColumn === 'done') {
-        void handleToggleTodoDone(id, true);
+      if (targetColumn === 'assignment') {
+        if (sourceColumn === 'todo') {
+          removeAssignmentFromTodoColumn(id);
+          if (overData?.type === 'assignment') {
+            insertIntoAssignmentColumn(id, overData.id as string);
+          }
+        } else if (sourceColumn === 'assignment' && overData?.type === 'assignment' && assignmentSortMode === 'deadline-asc') {
+          reorderAssignmentColumn(id, overData);
+        }
         return;
       }
+    }
+
+    // TODOカラムのTODO: 完了へ移動、カラム内並び替え。課題カラムへは行けない。
+    if (active.type === 'todo') {
+      const { id } = active;
+
+      if (targetColumn === 'done') {
+        void handleToggleTodoDone(id, true);
+        const insertBeforeKey = overData?.type === 'done'
+          ? `${overData.doneKind as string}:${overData.id as string}`
+          : undefined;
+        insertIntoDoneColumn(`todo:${id}`, insertBeforeKey);
+        return;
+      }
+
       if (targetColumn === 'todo' && (overData?.type === 'todo' || overData?.type === 'assignment')) {
         reorderTodoColumn(`todo:${id}`, overData);
       }
       return;
     }
 
-    // 完了カラム内のアイテム: TODOは未完了に戻せる。課題は課題カラム/TODOカラムへ戻せる。
+    // 完了カラム内のアイテム: カラム内並び替え、TODOへ戻す、課題カラム/TODOへ戻す
     if (active.type === 'done') {
       const { id, doneKind } = active;
+
       if (doneKind === 'todo') {
         if (targetColumn === 'todo') void handleToggleTodoDone(id, false);
         return;
       }
+
+      // doneKind === 'assignment'
       if (targetColumn === 'assignment') {
         void setAssignmentDone(id, false);
         removeAssignmentFromTodoColumn(id);
-      } else if (targetColumn === 'todo') {
+        if (overData?.type === 'assignment') {
+          insertIntoAssignmentColumn(id, overData.id as string);
+        }
+        return;
+      }
+
+      if (targetColumn === 'todo') {
         void setAssignmentDone(id, false);
-        addAssignmentToTodoColumn(id);
+        const insertBeforeKey = (overData?.type === 'todo' || overData?.type === 'assignment')
+          ? `${overData.type as string}:${overData.id as string}`
+          : undefined;
+        addAssignmentToTodoColumn(id, insertBeforeKey);
+        return;
+      }
+
+      if (targetColumn === 'done' && overData?.type === 'done') {
+        reorderDoneColumn(`${doneKind}:${id}`, overData);
       }
     }
   };
@@ -514,13 +706,10 @@ export default function TasksPage() {
   const overlayLabel = useMemo(() => {
     if (!activeDrag) return null;
     if (activeDrag.type === 'column') return columnLabels[activeDrag.column];
-    // TODOカラム内のブロック（Todo・送られた課題）はブロック自体の浮き上がりだけで表現し、
-    // カーソル追従のラベル表示は出さない。
-    if (activeDrag.type === 'todo') return null;
-    if (activeDrag.type === 'assignment' && activeDrag.column === 'todo') return null;
     if (activeDrag.type === 'assignment' || (activeDrag.type === 'done' && activeDrag.doneKind === 'assignment')) {
       return assignments.find(a => a.id === activeDrag.id)?.task_name ?? '課題';
     }
+    // todo（TODOカラム内・完了カラム内どちらも）はタイトルを表示。
     const todo = todos.find(t => t.id === activeDrag.id);
     return todo?.title?.split('\n')[0] || 'TODO';
   }, [activeDrag, assignments, todos]);
@@ -627,9 +816,16 @@ export default function TasksPage() {
               onDeleteTodo={handleDeleteTodo}
               onDeleteAssignment={handleDeleteAssignment}
               onResizeColumns={handleResizeColumns}
+              onMoveAssignmentToTodo={handleMoveAssignmentToTodo}
+              onMoveAssignmentToDone={handleMoveAssignmentToDone}
+              onMoveTodoAssignmentToAssignment={handleMoveTodoAssignmentToAssignment}
+              onMoveTodoToDone={handleMoveTodoToDone}
+              onMoveDoneAssignmentToAssignment={handleMoveDoneAssignmentToAssignment}
+              onMoveDoneAssignmentToTodo={handleMoveDoneAssignmentToTodo}
+              onMoveDoneTodoToTodo={handleMoveDoneTodoToTodo}
             />
 
-            <DragOverlay dropAnimation={null}>
+            <DragOverlay dropAnimation={null} modifiers={[snapToPointerModifier]}>
               {overlayLabel && (
                 <div
                   className="text-[13px] font-semibold"

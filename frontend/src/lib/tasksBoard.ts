@@ -352,6 +352,83 @@ export function saveTodoViewMode(mode: TodoViewMode): void {
   }
 }
 
+// ---- 課題・完了カラムの並び順 ----------------------------------------
+
+export function doneColumnItemKey(item: DoneItem): string {
+  return `${item.kind}:${item.data.id}`;
+}
+
+// 課題カラムの手動並び順（ID配列）。order が空の場合は fallbackMode で並べる。
+export function applyAssignmentColumnOrder(
+  assignments: Assignment[],
+  order: string[],
+  fallbackMode: AssignmentSortMode,
+): Assignment[] {
+  const fallbackSorted = sortAssignments(assignments, fallbackMode);
+  if (order.length === 0) return fallbackSorted;
+  const rank = new Map(order.map((id, idx) => [id, idx]));
+  const fallbackRank = new Map(fallbackSorted.map((a, idx) => [a.id, idx]));
+  return [...assignments].sort((a, b) => {
+    const ra = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
+    const rb = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
+    if (ra !== rb) return ra - rb;
+    return (fallbackRank.get(a.id) ?? 0) - (fallbackRank.get(b.id) ?? 0);
+  });
+}
+
+// 完了カラムの手動並び順（"kind:id" キー配列）。order が空の場合は done_at 降順。
+export function applyDoneColumnOrder(items: DoneItem[], order: string[]): DoneItem[] {
+  if (order.length === 0) return items;
+  const rank = new Map(order.map((key, idx) => [key, idx]));
+  return [...items].sort((a, b) => {
+    const ra = rank.has(doneColumnItemKey(a)) ? rank.get(doneColumnItemKey(a))! : Number.MAX_SAFE_INTEGER;
+    const rb = rank.has(doneColumnItemKey(b)) ? rank.get(doneColumnItemKey(b))! : Number.MAX_SAFE_INTEGER;
+    if (ra !== rb) return ra - rb;
+    return getDoneTime(b) - getDoneTime(a);
+  });
+}
+
+const ASSIGNMENT_COLUMN_ORDER_KEY = 'ku-assignment-column-order';
+const DONE_COLUMN_ORDER_KEY = 'ku-done-column-order';
+
+export function loadAssignmentColumnOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(ASSIGNMENT_COLUMN_ORDER_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveAssignmentColumnOrder(order: string[]): void {
+  try {
+    localStorage.setItem(ASSIGNMENT_COLUMN_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // 無視
+  }
+}
+
+export function loadDoneColumnOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(DONE_COLUMN_ORDER_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDoneColumnOrder(order: string[]): void {
+  try {
+    localStorage.setItem(DONE_COLUMN_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // 無視
+  }
+}
+
 export function loadColumnShares(): Partial<Record<ColumnKey, number>> {
   try {
     const raw = localStorage.getItem(COLUMN_SHARES_KEY);

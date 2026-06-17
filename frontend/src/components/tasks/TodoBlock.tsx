@@ -34,6 +34,9 @@ type Props = {
   onDeleteBlock: (id: string, focusPrev: boolean) => void;
   onNavigate: (id: string, dir: 'prev' | 'next') => void;
   onEnsureTrailingBlock?: (id: string) => void;
+  onMoveAssignmentToAssignment?: () => void;
+  onMoveAssignmentToDone?: () => void;
+  onMoveTodoToDone?: () => void;
 };
 
 // 内容に合わせて高さを自動調整する textarea 用フック（編集可・読み取り専用どちらでも使う）。
@@ -121,6 +124,9 @@ export default function TodoBlock({
   onDeleteBlock,
   onNavigate,
   onEnsureTrailingBlock,
+  onMoveAssignmentToAssignment,
+  onMoveAssignmentToDone,
+  onMoveTodoToDone,
 }: Props) {
   const id = item.type === 'todo' ? item.todo.id : item.assignment.id;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -141,11 +147,13 @@ export default function TodoBlock({
         transition,
         cursor: 'grab',
         touchAction: 'none',
+        // 課題・完了カラムと同じく透明度でドラッグ状態を表現（シャドウは使わない）。
+        opacity: isDragging ? 0.5 : 1,
         display: 'grid',
         gridTemplateColumns: '22px minmax(0, 1fr)',
         gap: 8,
         padding: '6px 10px',
-        ...getTextRowStyle(item.type, { selected: focused, isDragging, variant }),
+        ...getTextRowStyle(item.type, { selected: focused, variant }),
       }
     : {
         display: 'grid',
@@ -185,20 +193,25 @@ export default function TodoBlock({
           <AssignmentBlockContent
             assignment={item.assignment}
             systemTypes={systemTypes}
+            variant={variant}
             autoFocus={autoFocus}
             caret={caret}
             focusField={focusField}
+            hovered={hovered}
             onConsumeFocus={onConsumeFocus}
             onChangeTaskName={onChangeAssignmentTitle}
             onCreateBelow={onCreateBelow}
             onCreateBefore={onCreateBefore}
             onNavigate={onNavigate}
+            onMoveToAssignment={onMoveAssignmentToAssignment}
+            onMoveToDone={onMoveAssignmentToDone}
           />
         ) : (
           <TodoBlockContent
             todo={item.todo}
             busy={busy}
             isLast={isLast}
+            variant={variant}
             autoFocus={autoFocus}
             caret={caret}
             hovered={hovered}
@@ -210,6 +223,7 @@ export default function TodoBlock({
             onDeleteBlock={onDeleteBlock}
             onNavigate={onNavigate}
             onEnsureTrailingBlock={onEnsureTrailingBlock}
+            onMoveToDone={onMoveTodoToDone}
           />
         )}
       </div>
@@ -220,28 +234,37 @@ export default function TodoBlock({
 // 課題ブロック。授業名・残り期限は変更不可（LMS由来）だが、disabled/readOnly は使わず通常の
 // textarea として表示する（caret表示・ドラッグ選択・矢印キー移動をブラウザネイティブに保つため）。
 // 値を変える操作だけを個別にブロックし、課題名だけ編集可能にする。3行は ↑↓ で行き来できる。
+// リストモードでは課題名だけクリックで編集可能、他はテキスト表示。
 function AssignmentBlockContent({
   assignment,
   systemTypes,
+  variant,
   autoFocus = false,
   caret = 'end',
   focusField,
+  hovered = false,
   onConsumeFocus,
   onChangeTaskName,
   onCreateBelow,
   onCreateBefore,
   onNavigate,
+  onMoveToAssignment,
+  onMoveToDone,
 }: {
   assignment: Assignment;
   systemTypes: Record<string, string | null>;
+  variant: TodoBlockVariant;
   autoFocus?: boolean;
   caret?: CaretPos;
   focusField?: AssignmentFocusField;
+  hovered?: boolean;
   onConsumeFocus?: () => void;
   onChangeTaskName: (id: string, taskName: string) => void;
   onCreateBelow: (afterId: string) => void;
   onCreateBefore: (beforeId: string) => void;
   onNavigate: (id: string, dir: 'prev' | 'next') => void;
+  onMoveToAssignment?: () => void;
+  onMoveToDone?: () => void;
 }) {
   const lmsHref = buildAssignmentHref(assignment, systemTypes);
   const deadline = formatRemainingDeadline(assignment.availability_end);
@@ -255,15 +278,23 @@ function AssignmentBlockContent({
   const titleDebounceRef = useRef<number | null>(null);
   const titleRef = useAutoGrowTextarea(titleDraft);
 
+  // リストモード用: 課題名のクリック編集状態
+  const [isListTitleEditing, setIsListTitleEditing] = useState(false);
+  const pendingFocusRef = useRef<CaretPos | null>(null);
+
   useEffect(() => {
     if (!titleFocused) setTitleDraft(assignment.task_name);
   }, [assignment.task_name, titleFocused]);
 
-  // ブロック間の移動でこの課題ブロックへ着地したときのフォーカス先。
-  // 表示順（授業名→課題タイトル→期限）に沿って自然に見えるよう、focusField を見て決める
-  // （下方向で入るときは授業名、上方向で入るときは期限。指定が無ければ課題タイトル）。
+  // テキストモード: autoFocus 時の各フィールドへのフォーカス処理
+  // リストモード: 課題名の編集モードに入る
   useEffect(() => {
     if (!autoFocus) return;
+    if (variant === 'list') {
+      pendingFocusRef.current = caret;
+      setIsListTitleEditing(true);
+      return;
+    }
     const pos = caret === 'start' ? 'start' : 'end';
     if (focusField === 'course') {
       focusTextareaAt(courseRef.current, pos);
@@ -273,7 +304,21 @@ function AssignmentBlockContent({
       focusTextareaAt(titleRef.current, pos);
     }
     onConsumeFocus?.();
-  }, [autoFocus, caret, focusField, onConsumeFocus]);
+  }, [autoFocus, caret, focusField, variant, onConsumeFocus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // リストモード: 編集開始後に課題名 textarea へフォーカスする
+  useEffect(() => {
+    if (!isListTitleEditing) return;
+    const pending = pendingFocusRef.current;
+    if (pending === null) return;
+    pendingFocusRef.current = null;
+    const el = titleRef.current;
+    if (!el) return;
+    el.focus();
+    const pos = pending === 'start' ? 0 : el.value.length;
+    el.setSelectionRange(pos, pos);
+    onConsumeFocus?.();
+  }, [isListTitleEditing, onConsumeFocus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commitTitle = (value: string) => {
     if (value !== assignment.task_name) onChangeTaskName(assignment.id, value);
@@ -284,19 +329,121 @@ function AssignmentBlockContent({
     titleDebounceRef.current = window.setTimeout(() => commitTitle(value), 300);
   };
 
-  // 授業名 / 課題名 / 期限 は同じブロック内の3行として、↑↓ で行き来できるようにする
-  // （編集禁止の行でも矢印キーでの移動先になれる）。ブロックの最上段/最下段では、
-  // エディタ全体の前後のブロックへ移動する（onNavigate は Todo ブロックと共通の仕組み）。
-  //
-  // Enter は通常Todoと同じ「行を増やす／次のブロックを作る」体験に統一する。
-  // 授業名・期限は値そのものは変更しない（編集禁止のまま）。
+  // ---- リストモード JSX ----
+  if (variant === 'list') {
+    return (
+      <div style={{ lineHeight: 1.55 }}>
+        <div className="flex items-start gap-1.5" style={{ marginBottom: 2 }}>
+          {lmsHref ? (
+            <a
+              href={lmsHref}
+              target="webclass"
+              rel="noopener noreferrer"
+              onPointerDown={e => e.stopPropagation()}
+              className="text-[12.5px] font-semibold"
+              style={{ color: 'var(--c-accent)', textDecoration: 'none', lineHeight: '1.55' }}
+            >
+              {courseName || 'LMSで開く'}
+            </a>
+          ) : (
+            <span className="text-[12.5px]" style={{ color: 'var(--c-text-3)', lineHeight: '1.55' }}>
+              {courseName || '授業未設定'}
+            </span>
+          )}
+        </div>
+
+        {isListTitleEditing ? (
+          <textarea
+            ref={titleRef}
+            value={titleDraft}
+            rows={1}
+            onPointerDown={e => e.stopPropagation()}
+            onChange={e => {
+              setTitleDraft(e.target.value);
+              scheduleCommitTitle(e.target.value);
+            }}
+            onFocus={() => setTitleFocused(true)}
+            onBlur={() => {
+              setTitleFocused(false);
+              setIsListTitleEditing(false);
+              if (titleDebounceRef.current) window.clearTimeout(titleDebounceRef.current);
+              commitTitle(titleDraft);
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            className="text-[13.5px] font-semibold"
+            style={{
+              display: 'block',
+              width: '100%',
+              resize: 'none',
+              border: '1.5px solid var(--c-accent)',
+              borderRadius: 4,
+              outline: 'none',
+              background: 'transparent',
+              lineHeight: '1.55',
+              padding: '2px 5px',
+              fontFamily: 'inherit',
+              overflow: 'hidden',
+              color: 'var(--c-text-1)',
+            }}
+          />
+        ) : (
+          <div
+            onClick={() => {
+              pendingFocusRef.current = 'end';
+              setIsListTitleEditing(true);
+            }}
+            className="text-[13.5px] font-semibold"
+            style={{
+              cursor: 'text',
+              color: 'var(--c-text-1)',
+              lineHeight: '1.55',
+              minHeight: '1.55em',
+              wordBreak: 'break-word',
+            }}
+          >
+            {titleDraft}
+          </div>
+        )}
+
+        <div className="text-[12.5px] font-bold" style={{ color: deadline.color, marginTop: 2 }}>
+          {deadline.label}
+        </div>
+
+        {(onMoveToAssignment || onMoveToDone) && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              marginTop: 4,
+              opacity: hovered && !isListTitleEditing ? 1 : 0,
+              pointerEvents: hovered && !isListTitleEditing ? 'auto' : 'none',
+              transition: 'opacity 0.12s',
+            }}
+          >
+            {onMoveToAssignment && (
+              <TodoActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToAssignment}>←課題</TodoActionButton>
+            )}
+            {onMoveToDone && (
+              <TodoActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToDone}>完了→</TodoActionButton>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ---- テキストモード JSX（既存実装） ----
+
+  // 授業名 / 課題名 / 期限 は同じブロック内の3行として、↑↓ で行き来できるようにする。
   const handleCourseKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      // 授業名・課題タイトル・期限の値は一切変えず、この課題ブロックの直前に新しい
-      // Todoブロックを作ってそちらへフォーカスする（エディタの先頭行でEnterしたときの
-      // 「上に空行ができる」体験を、ブロック単位で表現する）。
       e.preventDefault();
-      if (e.shiftKey) return; // Shift+Enter は既存仕様（ソフト改行）に合わせて何もしない。
+      if (e.shiftKey) return;
       onCreateBefore(assignment.id);
       return;
     }
@@ -315,7 +462,6 @@ function AssignmentBlockContent({
       const el = e.currentTarget;
       const caretStart = el.selectionStart ?? titleDraft.length;
       if (isCurrentLineEmpty(titleDraft, caretStart)) {
-        // 空行で Enter → 課題タイトルを確定し、課題ブロックの下に新しい Todo ブロックを作る。
         e.preventDefault();
         const cleaned = titleDraft.replace(/\n+$/, '');
         setTitleDraft(cleaned);
@@ -323,7 +469,6 @@ function AssignmentBlockContent({
         onCreateBelow(assignment.id);
         return;
       }
-      // それ以外は通常Todoと同様、課題タイトル内で改行を挿入するだけ。
       return;
     }
     if (e.key === 'ArrowUp' && isOnFirstVisualLine(e.currentTarget)) {
@@ -337,9 +482,8 @@ function AssignmentBlockContent({
 
   const handleDeadlineKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      // 期限自体は変えず、課題ブロックの下に新しい Todo ブロックを作る。
       e.preventDefault();
-      if (e.shiftKey) return; // Shift+Enter は既存仕様（ソフト改行）に合わせて何もしない。
+      if (e.shiftKey) return;
       onCreateBelow(assignment.id);
       return;
     }
@@ -431,10 +575,12 @@ function AssignmentBlockContent({
 }
 
 // Todo ブロック。複数行入力可能で、空行で次のブロックへ、空ブロックで Backspace すると削除される。
+// リストモードではクリックで編集開始、ブラー時に保存。
 function TodoBlockContent({
   todo,
   busy,
   isLast,
+  variant,
   autoFocus,
   caret,
   hovered,
@@ -446,10 +592,12 @@ function TodoBlockContent({
   onDeleteBlock,
   onNavigate,
   onEnsureTrailingBlock,
+  onMoveToDone,
 }: {
   todo: Todo;
   busy: boolean;
   isLast: boolean;
+  variant: TodoBlockVariant;
   autoFocus: boolean;
   caret: CaretPos;
   hovered: boolean;
@@ -461,27 +609,40 @@ function TodoBlockContent({
   onDeleteBlock: (id: string, focusPrev: boolean) => void;
   onNavigate: (id: string, dir: 'prev' | 'next') => void;
   onEnsureTrailingBlock?: (id: string) => void;
+  onMoveToDone?: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState(todo.title);
   const debounceRef = useRef<number | null>(null);
 
+  // リストモード用: クリック編集状態
+  const [isListEditing, setIsListEditing] = useState(false);
+  const pendingFocusRef = useRef<CaretPos | null>(null);
+
+  const isEditing = variant === 'text' || isListEditing;
+
   // 外部からタイトルが変わったら（編集中でなければ）同期する。
   useEffect(() => {
-    if (!focused) setDraft(todo.title);
-  }, [todo.title, focused]);
+    if (!focused && !isListEditing) setDraft(todo.title);
+  }, [todo.title, focused, isListEditing]);
 
-  // 内容に合わせて高さを自動調整する。
+  // 内容に合わせて高さを自動調整する（編集中のみ）。
   useLayoutEffect(() => {
+    if (!isEditing) return;
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [draft]);
+  }, [draft, isEditing]);
 
-  // 新規作成・削除・矢印移動時のフォーカス移譲。
+  // autoFocus: テキストモードは直接フォーカス、リストモードは編集モードに入ってからフォーカス。
   useEffect(() => {
     if (!autoFocus) return;
+    if (variant === 'list') {
+      pendingFocusRef.current = caret;
+      setIsListEditing(true);
+      return;
+    }
     const el = textareaRef.current;
     if (el) {
       el.focus();
@@ -489,7 +650,21 @@ function TodoBlockContent({
       el.setSelectionRange(pos, pos);
     }
     onConsumeFocus?.();
-  }, [autoFocus, caret, onConsumeFocus]);
+  }, [autoFocus, caret, variant, onConsumeFocus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // リストモード: 編集開始後に textarea へフォーカスする。
+  useEffect(() => {
+    if (!isEditing) return;
+    const pending = pendingFocusRef.current;
+    if (pending === null) return;
+    pendingFocusRef.current = null;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const pos = pending === 'start' ? 0 : el.value.length;
+    el.setSelectionRange(pos, pos);
+    onConsumeFocus?.();
+  }, [isEditing, onConsumeFocus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commit = (value: string) => {
     if (value !== todo.title) onChangeTitle(todo.id, value);
@@ -501,13 +676,22 @@ function TodoBlockContent({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // リストモードでは Enter で確定、複雑なブロック操作はしない。
+    if (variant === 'list') {
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        e.currentTarget.blur();
+      }
+      return;
+    }
+
+    // テキストモード: 既存の複雑なキー操作。
     const el = e.currentTarget;
     const caretStart = el.selectionStart;
     const collapsed = el.selectionStart === el.selectionEnd;
 
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       if (isCurrentLineEmpty(draft, caretStart)) {
-        // 行全体が空のときだけ、このブロックを確定して新しいブロックを作る。
         e.preventDefault();
         const cleaned = draft.replace(/\n+$/, '');
         setDraft(cleaned);
@@ -515,18 +699,15 @@ function TodoBlockContent({
         onCreateBelow(todo.id);
         return;
       }
-      // それ以外は VSCode と同様、カーソル位置に改行を挿入するだけ（同じブロック内の行が増える）。
       return;
     }
 
     if (e.key === 'Backspace' && draft === '' && caretStart === 0) {
-      // 空ブロックで Backspace → ブロック削除し前ブロックへフォーカス。
       e.preventDefault();
       onDeleteBlock(todo.id, true);
       return;
     }
 
-    // 十字キーでブロック間を移動（テキストエディタのような感覚）。
     if (!collapsed) return;
     if (e.key === 'ArrowUp') {
       if (!draft.slice(0, caretStart).includes('\n')) {
@@ -552,42 +733,80 @@ function TodoBlockContent({
   };
 
   const showDelete = hovered || focused;
+  const showMoveButtons = (hovered || focused) && !isListEditing && variant === 'list';
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 6 }}>
-      <textarea
-        ref={textareaRef}
-        value={draft}
-        rows={1}
-        onPointerDown={e => e.stopPropagation()}
-        onChange={e => {
-          setDraft(e.target.value);
-          scheduleCommit(e.target.value);
-        }}
-        onFocus={() => onFocusChange(true)}
-        onBlur={() => {
-          onFocusChange(false);
-          if (debounceRef.current) window.clearTimeout(debounceRef.current);
-          commit(draft);
-          // 末尾ブロックに何か入力して確定したら、続けて書けるよう次の空ブロックを用意する。
-          if (isLast && draft.trim() !== '') onEnsureTrailingBlock?.(todo.id);
-        }}
-        onKeyDown={handleKeyDown}
-        className="text-[13.5px]"
-        style={{
-          width: '100%',
-          resize: 'none',
-          border: 'none',
-          outline: 'none',
-          background: 'transparent',
-          cursor: 'text',
-          color: 'var(--c-text-1)',
-          lineHeight: '1.55',
-          padding: 0,
-          fontFamily: 'inherit',
-          overflow: 'hidden',
-        }}
-      />
+      <div>
+        {isEditing ? (
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            rows={1}
+            onPointerDown={e => e.stopPropagation()}
+            onChange={e => {
+              setDraft(e.target.value);
+              scheduleCommit(e.target.value);
+            }}
+            onFocus={() => onFocusChange(true)}
+            onBlur={() => {
+              onFocusChange(false);
+              if (variant === 'list') setIsListEditing(false);
+              if (debounceRef.current) window.clearTimeout(debounceRef.current);
+              commit(draft);
+              if (variant === 'text' && isLast && draft.trim() !== '') onEnsureTrailingBlock?.(todo.id);
+            }}
+            onKeyDown={handleKeyDown}
+            className="text-[13.5px]"
+            style={{
+              width: '100%',
+              resize: 'none',
+              border: variant === 'list' ? '1.5px solid var(--c-accent)' : 'none',
+              borderRadius: variant === 'list' ? 4 : 0,
+              outline: 'none',
+              background: 'transparent',
+              cursor: 'text',
+              color: 'var(--c-text-1)',
+              lineHeight: '1.55',
+              padding: variant === 'list' ? '2px 5px' : 0,
+              fontFamily: 'inherit',
+              overflow: 'hidden',
+            }}
+          />
+        ) : (
+          // リストモード: 通常時はテキスト表示、クリックで編集開始。
+          <div
+            onClick={() => {
+              pendingFocusRef.current = 'end';
+              setIsListEditing(true);
+            }}
+            className="text-[13.5px]"
+            style={{
+              cursor: 'text',
+              color: draft ? 'var(--c-text-1)' : 'var(--c-text-3)',
+              lineHeight: '1.55',
+              padding: 0,
+              minHeight: '1.55em',
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {draft || 'クリックして編集'}
+          </div>
+        )}
+        {onMoveToDone && (
+          <div
+            style={{
+              marginTop: 4,
+              opacity: showMoveButtons ? 1 : 0,
+              pointerEvents: showMoveButtons ? 'auto' : 'none',
+              transition: 'opacity 0.12s',
+            }}
+          >
+            <TodoActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToDone}>完了→</TodoActionButton>
+          </div>
+        )}
+      </div>
 
       <button
         type="button"
@@ -609,5 +828,35 @@ function TodoBlockContent({
         ×
       </button>
     </div>
+  );
+}
+
+function TodoActionButton({
+  children,
+  onClick,
+  onPointerDown,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onPointerDown={onPointerDown}
+      onClick={onClick}
+      className="text-[11px] font-semibold"
+      style={{
+        padding: '3px 7px',
+        borderRadius: 5,
+        border: '1px solid var(--c-border)',
+        background: '#fff',
+        color: 'var(--c-text-2)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
   );
 }

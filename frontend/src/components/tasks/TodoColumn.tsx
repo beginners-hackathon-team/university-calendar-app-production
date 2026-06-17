@@ -22,6 +22,9 @@ type Props = {
   onCreateTodoBelow: (afterId: string | null) => Promise<string | undefined>;
   onCreateTodoBefore: (beforeId: string) => Promise<string | undefined>;
   onDeleteTodo: (id: string) => void;
+  onMoveAssignmentToAssignment: (id: string) => void;
+  onMoveAssignmentToDone: (id: string) => void;
+  onMoveTodoToDone: (id: string) => void;
 };
 
 // TODOカラム。テキストモードは「エディタ」、リストモードは同じブロックを見やすく
@@ -44,6 +47,9 @@ export default function TodoColumn({
   onCreateTodoBelow,
   onCreateTodoBefore,
   onDeleteTodo,
+  onMoveAssignmentToAssignment,
+  onMoveAssignmentToDone,
+  onMoveTodoToDone,
 }: Props) {
   const [focusTarget, setFocusTarget] = useState<{ id: string; caret: CaretPos; field?: AssignmentFocusField } | null>(null);
 
@@ -174,6 +180,9 @@ export default function TodoColumn({
                     onDeleteBlock={handleDeleteBlock}
                     onNavigate={handleNavigate}
                     onEnsureTrailingBlock={ensureTrailingEmptyBlock}
+                    onMoveAssignmentToAssignment={viewMode === 'list' && item.type === 'assignment' ? () => onMoveAssignmentToAssignment(item.assignment.id) : undefined}
+                    onMoveAssignmentToDone={viewMode === 'list' && item.type === 'assignment' ? () => onMoveAssignmentToDone(item.assignment.id) : undefined}
+                    onMoveTodoToDone={viewMode === 'list' && item.type === 'todo' ? () => onMoveTodoToDone(item.todo.id) : undefined}
                   />
                 );
               })}

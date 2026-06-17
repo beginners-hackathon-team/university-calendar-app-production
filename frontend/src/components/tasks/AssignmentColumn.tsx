@@ -1,13 +1,18 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
+import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Assignment } from '../../api/tasks';
 import {
   type AssignmentSortMode,
   assignmentSortOptions,
+  buildAssignmentHref,
+  formatCourseName,
+  formatRemainingDeadline,
   groupAssignmentsByCourse,
-  sortAssignments,
 } from '../../lib/tasksBoard';
-import { ColumnHeader, ColumnShell, EmptyState } from './ui';
-import AssignmentTaskCard from './AssignmentTaskCard';
+import { ColumnHeader, ColumnShell, EmptyState, getTextRowStyle } from './ui';
 
 type Props = {
   assignments: Assignment[];
@@ -19,6 +24,9 @@ type Props = {
   gripProps: Record<string, unknown>;
   highlighted: boolean;
   onSortModeChange: (mode: AssignmentSortMode) => void;
+  onChangeTitle: (id: string, taskName: string) => void;
+  onMoveToTodo: (id: string) => void;
+  onMoveToDone: (id: string) => void;
 };
 
 export default function AssignmentColumn({
@@ -31,8 +39,10 @@ export default function AssignmentColumn({
   gripProps,
   highlighted,
   onSortModeChange,
+  onChangeTitle,
+  onMoveToTodo,
+  onMoveToDone,
 }: Props) {
-  const sorted = sortMode === 'course' ? null : sortAssignments(assignments, 'deadline-asc');
   const groups = sortMode === 'course' ? groupAssignmentsByCourse(assignments) : null;
 
   return (
@@ -64,38 +74,100 @@ export default function AssignmentColumn({
         }
       />
 
-      <div>
+      <div style={{ padding: '6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {assignments.length === 0 ? (
           <EmptyState label="未完了の課題はありません" />
         ) : groups ? (
           groups.map(group => (
-            <div key={group.label}>
+            <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div
                 className="text-[11px] font-bold flex items-center justify-between gap-3"
-                style={{ padding: '10px 14px 5px', color: 'var(--c-text-3)' }}
+                style={{ padding: '6px 8px 3px', color: 'var(--c-text-3)' }}
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.label}</span>
                 <span style={{ flexShrink: 0 }}>{group.items.length}</span>
               </div>
               {group.items.map(a => (
-                <DraggableAssignmentCard key={a.id} assignment={a} systemTypes={systemTypes} />
+                <DraggableAssignmentCard
+                  key={a.id}
+                  assignment={a}
+                  systemTypes={systemTypes}
+                  onChangeTitle={onChangeTitle}
+                  onMoveToTodo={onMoveToTodo}
+                  onMoveToDone={onMoveToDone}
+                />
               ))}
             </div>
           ))
         ) : (
-          sorted!.map(a => <DraggableAssignmentCard key={a.id} assignment={a} systemTypes={systemTypes} />)
+          <SortableContext
+            items={assignments.map(a => `assignment:${a.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {assignments.map(a => (
+              <SortableAssignmentCard
+                key={a.id}
+                assignment={a}
+                systemTypes={systemTypes}
+                onChangeTitle={onChangeTitle}
+                onMoveToTodo={onMoveToTodo}
+                onMoveToDone={onMoveToDone}
+              />
+            ))}
+          </SortableContext>
         )}
       </div>
     </ColumnShell>
   );
 }
 
-function DraggableAssignmentCard({
+function SortableAssignmentCard({
   assignment,
   systemTypes,
+  onChangeTitle,
+  onMoveToTodo,
+  onMoveToDone,
 }: {
   assignment: Assignment;
   systemTypes: Record<string, string | null>;
+  onChangeTitle: (id: string, taskName: string) => void;
+  onMoveToTodo: (id: string) => void;
+  onMoveToDone: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `assignment:${assignment.id}`,
+    data: { type: 'assignment', column: 'assignment', id: assignment.id },
+  });
+
+  return (
+    <AssignmentListItem
+      assignment={assignment}
+      systemTypes={systemTypes}
+      setNodeRef={setNodeRef}
+      attributes={attributes}
+      listeners={listeners}
+      isDragging={isDragging}
+      transform={CSS.Transform.toString(transform)}
+      transition={transition}
+      onChangeTitle={title => onChangeTitle(assignment.id, title)}
+      onMoveToTodo={() => onMoveToTodo(assignment.id)}
+      onMoveToDone={() => onMoveToDone(assignment.id)}
+    />
+  );
+}
+
+function DraggableAssignmentCard({
+  assignment,
+  systemTypes,
+  onChangeTitle,
+  onMoveToTodo,
+  onMoveToDone,
+}: {
+  assignment: Assignment;
+  systemTypes: Record<string, string | null>;
+  onChangeTitle: (id: string, taskName: string) => void;
+  onMoveToTodo: (id: string) => void;
+  onMoveToDone: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `assignment:${assignment.id}`,
@@ -103,14 +175,233 @@ function DraggableAssignmentCard({
   });
 
   return (
-    <AssignmentTaskCard
+    <AssignmentListItem
       assignment={assignment}
       systemTypes={systemTypes}
       setNodeRef={setNodeRef}
-      dragAttributes={attributes}
-      dragListeners={listeners}
+      attributes={attributes}
+      listeners={listeners}
       isDragging={isDragging}
-      style={{ borderBottom: '1px solid var(--c-border)' }}
+      onChangeTitle={title => onChangeTitle(assignment.id, title)}
+      onMoveToTodo={() => onMoveToTodo(assignment.id)}
+      onMoveToDone={() => onMoveToDone(assignment.id)}
     />
+  );
+}
+
+function AssignmentListItem({
+  assignment,
+  systemTypes,
+  setNodeRef,
+  attributes,
+  listeners,
+  isDragging,
+  transform,
+  transition,
+  onChangeTitle,
+  onMoveToTodo,
+  onMoveToDone,
+}: {
+  assignment: Assignment;
+  systemTypes: Record<string, string | null>;
+  setNodeRef: (node: HTMLElement | null) => void;
+  attributes: DraggableAttributes;
+  listeners: DraggableSyntheticListeners;
+  isDragging: boolean;
+  transform?: string;
+  transition?: string;
+  onChangeTitle: (taskName: string) => void;
+  onMoveToTodo: () => void;
+  onMoveToDone: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(assignment.task_name);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const debounceRef = useRef<number | null>(null);
+  const pendingFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (!isEditing) setDraft(assignment.task_name);
+  }, [assignment.task_name, isEditing]);
+
+  useEffect(() => {
+    if (!isEditing || !pendingFocusRef.current) return;
+    pendingFocusRef.current = false;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [isEditing]);
+
+  useLayoutEffect(() => {
+    if (!isEditing) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft, isEditing]);
+
+  const commitTitle = (value: string) => {
+    if (value !== assignment.task_name) onChangeTitle(value);
+  };
+
+  const scheduleCommit = (value: string) => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => commitTitle(value), 300);
+  };
+
+  const lmsHref = buildAssignmentHref(assignment, systemTypes);
+  const deadline = formatRemainingDeadline(assignment.availability_end);
+  const courseName = formatCourseName(assignment.course_name);
+
+  const showButtons = hovered && !isEditing;
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '22px minmax(0, 1fr)',
+        gap: 8,
+        padding: '6px 10px',
+        cursor: 'grab',
+        touchAction: 'none',
+        opacity: isDragging ? 0.5 : 1,
+        transform,
+        transition,
+        ...getTextRowStyle('assignment', { selected: isEditing, isDragging, variant: 'list' }),
+      }}
+    >
+      <div />
+      <div style={{ minWidth: 0 }}>
+        <div className="text-[12px]" style={{ marginBottom: 1 }}>
+          {lmsHref ? (
+            <a
+              href={lmsHref}
+              target="webclass"
+              rel="noopener noreferrer"
+              onPointerDown={e => e.stopPropagation()}
+              className="font-semibold"
+              style={{ color: 'var(--c-accent)', textDecoration: 'none' }}
+            >
+              {courseName || 'LMSで開く'}
+            </a>
+          ) : (
+            <span style={{ color: 'var(--c-text-3)' }}>{courseName || '授業未設定'}</span>
+          )}
+        </div>
+
+        {isEditing ? (
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            rows={1}
+            onPointerDown={e => e.stopPropagation()}
+            onChange={e => {
+              setDraft(e.target.value);
+              scheduleCommit(e.target.value);
+            }}
+            onBlur={() => {
+              setIsEditing(false);
+              if (debounceRef.current) window.clearTimeout(debounceRef.current);
+              commitTitle(draft);
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            className="text-[13.5px] font-semibold"
+            style={{
+              display: 'block',
+              width: '100%',
+              resize: 'none',
+              border: '1.5px solid var(--c-accent)',
+              borderRadius: 4,
+              outline: 'none',
+              background: 'transparent',
+              lineHeight: '1.55',
+              padding: '2px 5px',
+              fontFamily: 'inherit',
+              overflow: 'hidden',
+              color: 'var(--c-text-1)',
+            }}
+          />
+        ) : (
+          <div
+            onClick={() => {
+              pendingFocusRef.current = true;
+              setIsEditing(true);
+            }}
+            className="text-[13.5px] font-semibold"
+            style={{
+              cursor: 'text',
+              color: 'var(--c-text-1)',
+              lineHeight: '1.55',
+              minHeight: '1.55em',
+              wordBreak: 'break-word',
+            }}
+          >
+            {draft}
+          </div>
+        )}
+
+        <div className="text-[12px] font-bold" style={{ color: deadline.color, marginTop: 1 }}>
+          {deadline.label}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            marginTop: 4,
+            opacity: showButtons ? 1 : 0,
+            pointerEvents: showButtons ? 'auto' : 'none',
+            transition: 'opacity 0.12s',
+          }}
+        >
+          <ActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToTodo}>Todo→</ActionButton>
+          <ActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToDone}>完了→</ActionButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({
+  children,
+  onClick,
+  onPointerDown,
+  danger,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onPointerDown={onPointerDown}
+      onClick={onClick}
+      className="text-[11px] font-semibold"
+      style={{
+        padding: '3px 7px',
+        borderRadius: 5,
+        border: danger ? 'none' : '1px solid var(--c-border)',
+        background: danger ? 'transparent' : '#fff',
+        color: danger ? 'var(--c-danger)' : 'var(--c-text-2)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
   );
 }
