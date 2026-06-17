@@ -29,6 +29,8 @@ from app.schemas.university_event import CreateUniEvent, UpdateUniEvent
 from app.schemas.extension import ExtensionSyncPayload, ImportCoursesPayload
 from app.schemas.task import (
     AssignmentPublic,
+    UpdateAssignmentDone,
+    UpdateAssignmentTitle,
     ImportAssignmentsPayload,
     ImportLmsTasksPayload,
     TodoPublic,
@@ -891,8 +893,9 @@ def get_lms_system_types(
 
 
 @app.put("/api/assignments/{assignment_id}/done")
-def mark_assignment_done(
+def update_assignment_done(
     assignment_id: str,
+    body: UpdateAssignmentDone,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
@@ -907,8 +910,31 @@ def mark_assignment_done(
     )
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    a.is_done = True
-    a.done_at = datetime.now(timezone.utc)
+    a.is_done = body.is_done
+    a.done_at = datetime.now(timezone.utc) if body.is_done else None
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.put("/api/assignments/{assignment_id}/title")
+def update_assignment_title(
+    assignment_id: str,
+    body: UpdateAssignmentTitle,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    a = (
+        db.query(Task)
+        .filter(
+            Task.id == assignment_id,
+            Task.user_id == current_user.user_id,
+            Task.type == "assignment",
+        )
+        .one_or_none()
+    )
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    a.title = body.task_name
     db.commit()
     return {"status": "ok"}
 

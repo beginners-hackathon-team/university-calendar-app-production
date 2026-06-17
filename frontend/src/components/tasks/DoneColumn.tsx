@@ -31,7 +31,7 @@ export default function DoneColumn({
     <ColumnShell setNodeRef={setNodeRef} style={style} highlighted={highlighted}>
       <ColumnHeader title="完了" count={items.length} gripRef={gripRef} gripProps={gripProps} />
 
-      <div style={{ overflowY: 'auto', flex: 1 }}>
+      <div>
         <div className="text-[11px]" style={{ padding: '8px 14px', color: 'var(--c-text-3)', borderBottom: '1px solid #F1F3F6' }}>
           完了から1週間で自動的に消えます。TODOはドラッグで戻せます。
         </div>
@@ -70,7 +70,7 @@ function DoneCard({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `done:${item.kind}:${item.data.id}`,
-    data: { type: 'done', doneKind: item.kind, id: item.data.id },
+    data: { type: 'done', column: 'done', doneKind: item.kind, id: item.data.id },
   });
 
   const title = item.kind === 'assignment' ? item.data.task_name : item.data.title;
@@ -80,7 +80,7 @@ function DoneCard({
     <div
       ref={setNodeRef}
       {...attributes}
-      {...(item.kind === 'todo' ? listeners : {})}
+      {...listeners}
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -88,7 +88,7 @@ function DoneCard({
         alignItems: 'center',
         padding: '11px 14px',
         borderBottom: '1px solid #F1F3F6',
-        cursor: item.kind === 'todo' ? 'grab' : 'default',
+        cursor: 'grab',
         opacity: isDragging ? 0.5 : 1,
         touchAction: 'none',
       }}

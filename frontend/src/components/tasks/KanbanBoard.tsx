@@ -1,9 +1,9 @@
-import { useRef, type PointerEvent, type ReactNode } from 'react';
+import { Fragment, useRef, type PointerEvent, type ReactNode } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Assignment, Todo } from '../../api/tasks';
-import { type AssignmentSortMode, type ColumnKey, type DoneItem } from '../../lib/tasksBoard';
+import type { Assignment } from '../../api/tasks';
+import { MIN_SHARE_FRACTION, type AssignmentSortMode, type ColumnKey, type DoneItem, type TodoColumnItem, type TodoViewMode } from '../../lib/tasksBoard';
 import AssignmentColumn from './AssignmentColumn';
 import TodoColumn from './TodoColumn';
 import DoneColumn from './DoneColumn';
@@ -11,25 +11,30 @@ import DoneColumn from './DoneColumn';
 type Props = {
   visibleOrder: ColumnKey[];
   dropTargetColumn: ColumnKey | null;
-  columnWidths: Record<ColumnKey, number>;
+  columnShares: Record<ColumnKey, number>;
   pendingAssignments: Assignment[];
-  mirroredAssignments: Assignment[];
-  orderedTodos: Todo[];
+  todoColumnItems: TodoColumnItem[];
+  todoViewMode: TodoViewMode;
   doneItems: DoneItem[];
   systemTypes: Record<string, string | null>;
   busyKeys: Set<string>;
   assignmentSortMode: AssignmentSortMode;
   onAssignmentSortModeChange: (mode: AssignmentSortMode) => void;
+  onTodoViewModeChange: (mode: TodoViewMode) => void;
+  onCreateTodo: (title: string) => void;
   onChangeTodoTitle: (id: string, title: string) => void;
+  onChangeAssignmentTitle: (id: string, taskName: string) => void;
   onCreateTodoBelow: (afterId: string | null) => Promise<string | undefined>;
+  onCreateTodoBefore: (beforeId: string) => Promise<string | undefined>;
   onDeleteTodo: (id: string) => void;
-  onReturnAssignment: (id: string) => void;
   onDeleteAssignment: (id: string) => void;
-  onResizeColumn: (key: ColumnKey, width: number) => void;
+  onResizeColumns: (a: ColumnKey, b: ColumnKey, shareA: number, shareB: number) => void;
 };
 
 export default function KanbanBoard(props: Props) {
   const { visibleOrder } = props;
+  // 列の実測幅（px）を保持し、リサイズ開始時の基準値として使う。
+  const columnRefs = useRef<Partial<Record<ColumnKey, HTMLElement | null>>>({});
 
   if (visibleOrder.length === 0) {
     return (
@@ -44,15 +49,34 @@ export default function KanbanBoard(props: Props) {
 
   return (
     <SortableContext items={visibleOrder.map(key => `col:${key}`)} strategy={horizontalListSortingStrategy}>
-      <div className="flex items-stretch" style={{ height: 'calc(100vh - 220px)', minHeight: 440, overflowX: 'auto', paddingBottom: 4 }}>
-        {visibleOrder.map(key => (
-          <div key={key} className="flex items-stretch" style={{ flex: '0 0 auto' }}>
-            <SortableColumn columnKey={key} width={props.columnWidths[key]}>
-              {slot => renderColumn(key, props, slot)}
-            </SortableColumn>
-            <ColumnResizer width={props.columnWidths[key]} onChange={w => props.onResizeColumn(key, w)} />
-          </div>
-        ))}
+      <div className="flex items-stretch">
+        {visibleOrder.map((key, index) => {
+          const nextKey = visibleOrder[index + 1];
+          return (
+            <Fragment key={key}>
+              <SortableColumn
+                columnKey={key}
+                share={props.columnShares[key]}
+                registerRef={node => {
+                  columnRefs.current[key] = node;
+                }}
+              >
+                {slot => renderColumn(key, props, slot)}
+              </SortableColumn>
+              {nextKey && (
+                <ColumnResizer
+                  shareA={props.columnShares[key]}
+                  shareB={props.columnShares[nextKey]}
+                  measure={() => ({
+                    a: columnRefs.current[key]?.getBoundingClientRect().width ?? 0,
+                    b: columnRefs.current[nextKey]?.getBoundingClientRect().width ?? 0,
+                  })}
+                  onChange={(shareA, shareB) => props.onResizeColumns(key, nextKey, shareA, shareB)}
+                />
+              )}
+            </Fragment>
+          );
+        })}
       </div>
     </SortableContext>
   );
@@ -65,26 +89,40 @@ type SlotProps = {
   gripProps: Record<string, unknown>;
 };
 
-function SortableColumn({ columnKey, width, children }: { columnKey: ColumnKey; width: number; children: (slot: SlotProps) => ReactNode }) {
+function SortableColumn({
+  columnKey,
+  share,
+  registerRef,
+  children,
+}: {
+  columnKey: ColumnKey;
+  share: number;
+  registerRef: (node: HTMLElement | null) => void;
+  children: (slot: SlotProps) => ReactNode;
+}) {
   const { setNodeRef, setActivatorNodeRef, transform, transition, attributes, listeners, isDragging } = useSortable({
     id: `col:${columnKey}`,
     data: { type: 'column', column: columnKey },
   });
 
   const style: React.CSSProperties = {
-    flex: '0 0 auto',
-    width,
-    height: '100%',
+    flex: `${share} 1 0%`,
+    minWidth: 0,
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
     zIndex: isDragging ? 5 : undefined,
   };
 
+  const combinedRef = (node: HTMLElement | null) => {
+    setNodeRef(node);
+    registerRef(node);
+  };
+
   return (
     <>
       {children({
-        setNodeRef,
+        setNodeRef: combinedRef,
         style,
         gripRef: setActivatorNodeRef,
         gripProps: { ...attributes, ...listeners },
@@ -93,22 +131,44 @@ function SortableColumn({ columnKey, width, children }: { columnKey: ColumnKey; 
   );
 }
 
-// 列の右端をドラッグして幅をウィンドウのように調整する。
-function ColumnResizer({ width, onChange }: { width: number; onChange: (width: number) => void }) {
+// 列の間のハンドルをドラッグして、隣り合う2列で幅の比率を分け合う（合計の比率は変えないので画面外に出ない）。
+function ColumnResizer({
+  shareA,
+  shareB,
+  measure,
+  onChange,
+}: {
+  shareA: number;
+  shareB: number;
+  measure: () => { a: number; b: number };
+  onChange: (shareA: number, shareB: number) => void;
+}) {
   const startX = useRef(0);
-  const startW = useRef(0);
+  const startPxA = useRef(0);
+  const startPxB = useRef(0);
+  const shareSum = useRef(0);
 
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     startX.current = e.clientX;
-    startW.current = width;
+    const { a, b } = measure();
+    startPxA.current = a;
+    startPxB.current = b;
+    shareSum.current = shareA + shareB;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!(e.buttons & 1)) return;
-    onChange(startW.current + (e.clientX - startX.current));
+    const totalPx = startPxA.current + startPxB.current;
+    if (totalPx <= 0) return;
+    const minPx = totalPx * MIN_SHARE_FRACTION;
+    const deltaX = e.clientX - startX.current;
+    const newPxA = Math.min(Math.max(startPxA.current + deltaX, minPx), totalPx - minPx);
+    const fractionA = newPxA / totalPx;
+    const sum = shareSum.current;
+    onChange(fractionA * sum, (1 - fractionA) * sum);
   };
 
   return (
@@ -121,7 +181,6 @@ function ColumnResizer({ width, onChange }: { width: number; onChange: (width: n
       style={{
         flex: '0 0 auto',
         width: 16,
-        height: '100%',
         cursor: 'col-resize',
         display: 'flex',
         alignItems: 'center',
@@ -154,8 +213,8 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
   if (key === 'todo') {
     return (
       <TodoColumn
-        todos={props.orderedTodos}
-        mirroredAssignments={props.mirroredAssignments}
+        items={props.todoColumnItems}
+        viewMode={props.todoViewMode}
         systemTypes={props.systemTypes}
         busyKeys={props.busyKeys}
         setNodeRef={slot.setNodeRef}
@@ -163,10 +222,13 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         gripRef={slot.gripRef}
         gripProps={slot.gripProps}
         highlighted={highlighted}
+        onViewModeChange={props.onTodoViewModeChange}
         onChangeTitle={props.onChangeTodoTitle}
-        onCreateBelow={props.onCreateTodoBelow}
+        onChangeAssignmentTitle={props.onChangeAssignmentTitle}
+        onCreateTodo={props.onCreateTodo}
+        onCreateTodoBelow={props.onCreateTodoBelow}
+        onCreateTodoBefore={props.onCreateTodoBefore}
         onDeleteTodo={props.onDeleteTodo}
-        onReturnAssignment={props.onReturnAssignment}
       />
     );
   }

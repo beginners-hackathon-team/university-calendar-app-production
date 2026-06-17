@@ -59,6 +59,14 @@ class AssignmentPublic(BaseModel):
         from_attributes = True
 
 
+class UpdateAssignmentDone(BaseModel):
+    is_done: bool
+
+
+class UpdateAssignmentTitle(BaseModel):
+    task_name: str
+
+
 class ImportAssignmentItem(BaseModel):
     task_name: str
     task_contents_id: str

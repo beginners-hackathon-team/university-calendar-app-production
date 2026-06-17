@@ -1,24 +1,4 @@
 import type { ReactNode } from 'react';
-import { type DeadlineMeta, toneStyles } from '../../lib/tasksBoard';
-
-export function DeadlinePill({ meta }: { meta: DeadlineMeta }) {
-  const style = toneStyles[meta.tone];
-  return (
-    <span
-      className="text-[11px] font-bold"
-      style={{
-        color: style.color,
-        background: style.background,
-        border: `1px solid ${style.border}`,
-        borderRadius: 999,
-        padding: '2px 7px',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {meta.label}
-    </span>
-  );
-}
 
 export function TinyPill({ children, muted = false }: { children: ReactNode; muted?: boolean }) {
   return (
@@ -158,6 +138,33 @@ export function ColumnHeader({
       {right}
     </div>
   );
+}
+
+// TODOカラムのブロック（課題/Todo共通、テキストモード・リストモードでも共通）。
+// VSCode を参考に、境界線・ホバーハイライトは一切使わない。背景が出るのは
+// 「選択中（カーソルがある = 現在行ハイライト）」と「ドラッグ中」だけ。
+// リストモードは常時その背景を出し、角丸をわずかにつけて「少しだけ強調したブロック」に
+// 留める（カードUIまでは寄せない）。
+export type TextRowKind = 'assignment' | 'todo';
+
+const TEXT_ROW_BG_ACTIVE: Record<TextRowKind, string> = {
+  todo: '#F1F2F4',
+  assignment: '#E9EDF7',
+};
+
+export function getTextRowStyle(
+  kind: TextRowKind,
+  opts: { selected: boolean; isDragging?: boolean; variant: 'text' | 'list' },
+): React.CSSProperties {
+  const { selected, isDragging, variant } = opts;
+  const showBg = variant === 'list' || selected || Boolean(isDragging);
+  return {
+    borderRadius: variant === 'list' ? 5 : 0,
+    background: showBg ? TEXT_ROW_BG_ACTIVE[kind] : 'transparent',
+    // ドラッグ中の「浮き上がり」はシャドウだけで表現する（ツールチップ等の付加表示はしない）。
+    boxShadow: isDragging ? '0 6px 16px rgba(0,0,0,0.12)' : 'none',
+    transition: 'background 0.12s, box-shadow 0.12s',
+  };
 }
 
 export function EmptyState({ label }: { label: string }) {

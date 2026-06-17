@@ -39,9 +39,22 @@ export async function fetchLmsSystemTypes(): Promise<Record<string, string | nul
   return res.json();
 }
 
-export async function markAssignmentDone(id: string): Promise<void> {
-  const res = await authFetch(`/api/assignments/${id}/done`, { method: 'PUT' });
+export async function updateAssignmentDone(id: string, isDone: boolean): Promise<void> {
+  const res = await authFetch(`/api/assignments/${id}/done`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_done: isDone }),
+  });
   if (!res.ok) throw new Error('課題の更新に失敗しました');
+}
+
+export async function updateAssignmentTitle(id: string, taskName: string): Promise<void> {
+  const res = await authFetch(`/api/assignments/${id}/title`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_name: taskName }),
+  });
+  if (!res.ok) throw new Error('課題名の更新に失敗しました');
 }
 
 export async function deleteAssignment(id: string): Promise<void> {

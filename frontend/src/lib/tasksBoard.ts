@@ -17,32 +17,18 @@ export type AssignmentGroup = {
   items: Assignment[];
 };
 
-export type DeadlineTone = 'danger' | 'warning' | 'notice' | 'muted';
-
-export type DeadlineMeta = {
-  label: string;
-  tone: DeadlineTone;
-  rank: number;
-};
-
 export type BoardVisible = Record<ColumnKey, boolean>;
 
-// ドラッグ中アイテムの識別子（DnD の active.id / over.id に使う）。
-export type DragItem =
-  | { kind: 'assignment'; id: string }
-  | { kind: 'todo'; id: string }
-  | { kind: 'done'; doneKind: 'assignment' | 'todo'; id: string }
-  | { kind: 'column'; column: ColumnKey };
+// TODOカラムの表示モード。
+export type TodoViewMode = 'list' | 'text';
+
+// TODOカラムに表示するアイテム（TODO本体 / TODOへ送られた課題）の共通表現。
+// 課題データを潰して TODO 型に変換せず、元の Assignment をそのまま保持する。
+export type TodoColumnItem =
+  | { type: 'todo'; todo: Todo }
+  | { type: 'assignment'; assignment: Assignment };
 
 // ---- スタイル定数 ---------------------------------------------------
-
-// 落ち着いた中で少し濃いめのトーン。
-export const toneStyles: Record<DeadlineTone, { color: string; background: string; border: string }> = {
-  danger: { color: '#B0454F', background: '#F6E7E9', border: 'transparent' },
-  warning: { color: '#9A7236', background: '#F5EDDD', border: 'transparent' },
-  notice: { color: '#4F689C', background: '#EAEEF6', border: 'transparent' },
-  muted: { color: 'var(--c-text-3)', background: '#F1F2F4', border: 'transparent' },
-};
 
 export const assignmentSortOptions: { value: AssignmentSortMode; label: string }[] = [
   { value: 'deadline-asc', label: '期限が近い順' },
@@ -55,22 +41,21 @@ export const columnLabels: Record<ColumnKey, string> = {
   done: '完了',
 };
 
-// 期限が「1週間以内」(rank<=3) の課題は TODO カラムにも表示する閾値。
-export const TODO_VISIBLE_DEADLINE_RANK = 3;
-
 // ---- localStorage キー ----------------------------------------------
 
 const ASSIGNMENT_SORT_KEY = 'ku-assignment-sort-mode';
 const BOARD_VISIBLE_KEY = 'ku-board-visible';
 const BOARD_ORDER_KEY = 'ku-board-order';
-const TODO_ORDER_KEY = 'ku-todo-order';
-const ASSIGNMENT_TODO_PINS_KEY = 'ku-assignment-todo-pins';
-const ASSIGNMENT_KEEP_KEY = 'ku-assignment-keep';
-const COLUMN_WIDTHS_KEY = 'ku-board-widths';
+const COLUMN_SHARES_KEY = 'ku-board-shares';
+const TODO_COLUMN_ORDER_KEY = 'ku-todo-column-order';
+const TODO_COLUMN_ASSIGNMENTS_KEY = 'ku-todo-column-assignments';
+const TODO_VIEW_MODE_KEY = 'ku-todo-view-mode';
 
-export const DEFAULT_COLUMN_WIDTH = 360;
-export const MIN_COLUMN_WIDTH = 240;
-export const MAX_COLUMN_WIDTH = 760;
+// 列の幅は固定px ではなく、表示中の列同士で分け合う比率（flex-grow の重み）として持つ。
+// 列の表示/非表示が切り替わるたびに等分（1:1:1 など）へリセットされる。
+export const DEFAULT_COLUMN_SHARE = 1;
+// リサイズ時、隣接ペアの一方が縮みすぎないようにする下限比率。
+export const MIN_SHARE_FRACTION = 0.15;
 
 const DEFAULT_VISIBLE: BoardVisible = { assignment: false, todo: true, done: false };
 const DEFAULT_ORDER: ColumnKey[] = ['assignment', 'todo', 'done'];
@@ -83,16 +68,51 @@ export function parseTaskDate(value: string | null | undefined): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-export function getDeadlineMeta(until: string | null | undefined): DeadlineMeta {
+// 課題の並び替え用ランク（0=期限切れ … 5=期限なし、小さいほど優先表示）。
+export function getDeadlineRank(until: string | null | undefined): number {
   const parsed = parseTaskDate(until);
-  if (parsed === null) return { label: '期限なし', tone: 'muted', rank: 5 };
-
+  if (parsed === null) return 5;
   const diffDays = (parsed - Date.now()) / (1000 * 60 * 60 * 24);
-  if (diffDays < 0) return { label: '期限切れ', tone: 'muted', rank: 0 };
-  if (diffDays < 1) return { label: '今日まで', tone: 'danger', rank: 1 };
-  if (diffDays < 3) return { label: '3日以内', tone: 'warning', rank: 2 };
-  if (diffDays < 7) return { label: '1週間以内', tone: 'notice', rank: 3 };
-  return { label: '余裕あり', tone: 'muted', rank: 4 };
+  if (diffDays < 0) return 0;
+  if (diffDays < 1) return 1;
+  if (diffDays < 3) return 2;
+  if (diffDays < 7) return 3;
+  return 4;
+}
+
+export type RemainingDeadline = {
+  label: string;
+  color: string;
+};
+
+const REMAINING_DAY_MS = 24 * 60 * 60 * 1000;
+const REMAINING_WEEK_MS = 7 * REMAINING_DAY_MS;
+const REMAINING_DANGER_COLOR = 'var(--c-danger)';
+const REMAINING_WARNING_COLOR = '#B8860B';
+
+// 課題カード・TODOテキストモードで使う「残り期限」の相対表記（例: あと3日 5時間）。
+export function formatRemainingDeadline(until: string | null | undefined): RemainingDeadline {
+  const parsed = parseTaskDate(until);
+  if (parsed === null) return { label: '期限なし', color: 'var(--c-text-3)' };
+
+  const diffMs = parsed - Date.now();
+  if (diffMs <= 0) return { label: '期限切れ', color: REMAINING_DANGER_COLOR };
+
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+
+  const label = days > 0
+    ? (hours > 0 ? `あと${days}日 ${hours}時間` : `あと${days}日`)
+    : (hours > 0 ? `あと${hours}時間` : 'あと1時間未満');
+
+  const color = diffMs <= REMAINING_DAY_MS
+    ? REMAINING_DANGER_COLOR
+    : diffMs <= REMAINING_WEEK_MS
+      ? REMAINING_WARNING_COLOR
+      : 'var(--c-text-1)';
+
+  return { label, color };
 }
 
 export function formatDateTime(value: string | null | undefined): string | null {
@@ -117,9 +137,7 @@ function getDeadlineSortValue(assignment: Assignment): number {
 }
 
 export function compareAssignmentByDeadlineAsc(a: Assignment, b: Assignment): number {
-  const ma = getDeadlineMeta(a.availability_end);
-  const mb = getDeadlineMeta(b.availability_end);
-  return ma.rank - mb.rank
+  return getDeadlineRank(a.availability_end) - getDeadlineRank(b.availability_end)
     || getDeadlineSortValue(a) - getDeadlineSortValue(b)
     || a.task_name.localeCompare(b.task_name, 'ja');
 }
@@ -139,7 +157,7 @@ export function sortAssignments(assignments: Assignment[], mode: AssignmentSortM
 export function groupAssignmentsByCourse(assignments: Assignment[]): AssignmentGroup[] {
   const groups = new Map<string, Assignment[]>();
   for (const assignment of assignments) {
-    const label = assignment.course_name?.trim() || '授業未設定';
+    const label = formatCourseName(assignment.course_name) || '授業未設定';
     const items = groups.get(label) ?? [];
     items.push(assignment);
     groups.set(label, items);
@@ -147,6 +165,23 @@ export function groupAssignmentsByCourse(assignments: Assignment[]): AssignmentG
   return Array.from(groups.entries())
     .map(([label, items]) => ({ label, items: items.sort(compareAssignmentByDeadlineAsc) }))
     .sort((a, b) => a.label.localeCompare(b.label, 'ja'));
+}
+
+// LMSの授業名に含まれるかっこ書き（担当教員・教室コード・開講区分など）を取り除いて表示する。
+// 例: 「グローバルキャリアデザイン論(Q2)（11016） (2026-前期-火-3)」→「グローバルキャリアデザイン論(Q2)」
+// かっこの中身がQ1〜Q4の学期表記だけの場合はそのまま残し、Q表記が他の情報と混在する場合はQ部分だけ残す。
+const BRACKET_RE = /[(（]([^()（）]*)[)）]/g;
+const QUARTER_TOKEN_RE = /Q[1-4]/gi;
+
+export function formatCourseName(name: string | null | undefined): string {
+  if (!name) return '';
+  const formatted = name.replace(BRACKET_RE, (whole, inner: string) => {
+    const quarters = inner.match(QUARTER_TOKEN_RE);
+    if (!quarters) return '';
+    const rest = inner.replace(QUARTER_TOKEN_RE, '').trim();
+    return rest === '' ? whole : `(${quarters.join('')})`;
+  });
+  return formatted.replace(/\s{2,}/g, ' ').trim();
 }
 
 export function buildAssignmentHref(
@@ -158,17 +193,26 @@ export function buildAssignmentHref(
     : undefined;
 }
 
-// ---- TODO の順序適用 ------------------------------------------------
+// ---- TODOカラムの並び順適用 -------------------------------------------
 
-// localStorage に保存した id 配列の順で並べ、未知の id（新規TODO）は末尾へ。
-export function applyTodoOrder(todos: Todo[], order: string[]): Todo[] {
-  if (order.length === 0) return todos;
-  const rank = new Map(order.map((id, index) => [id, index]));
-  return [...todos].sort((a, b) => {
-    const ra = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
-    const rb = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
+// TodoColumnItem を一意に識別する order キー（'todo:<id>' / 'assignment:<id>'）。
+export function todoColumnItemKey(item: TodoColumnItem): string {
+  return item.type === 'todo' ? `todo:${item.todo.id}` : `assignment:${item.assignment.id}`;
+}
+
+function getTodoColumnItemCreatedAt(item: TodoColumnItem): number {
+  return parseTaskDate(item.type === 'todo' ? item.todo.created_at : item.assignment.created_at) ?? 0;
+}
+
+// localStorage に保存した order キー配列の順で並べ、未知のキー（新規追加分）は作成日時順で末尾へ。
+export function applyTodoColumnOrder(items: TodoColumnItem[], order: string[]): TodoColumnItem[] {
+  if (order.length === 0) return items;
+  const rank = new Map(order.map((key, index) => [key, index]));
+  return [...items].sort((a, b) => {
+    const ra = rank.has(todoColumnItemKey(a)) ? rank.get(todoColumnItemKey(a))! : Number.MAX_SAFE_INTEGER;
+    const rb = rank.has(todoColumnItemKey(b)) ? rank.get(todoColumnItemKey(b))! : Number.MAX_SAFE_INTEGER;
     if (ra !== rb) return ra - rb;
-    return parseTaskDate(a.created_at)! - parseTaskDate(b.created_at)!;
+    return getTodoColumnItemCreatedAt(a) - getTodoColumnItemCreatedAt(b);
   });
 }
 
@@ -247,9 +291,10 @@ export function saveBoardOrder(order: ColumnKey[]): void {
   }
 }
 
-export function loadTodoOrder(): string[] {
+// TODOカラム内の並び順（TODO本体・TODOへ送られた課題を含む order キー配列）。
+export function loadTodoColumnOrder(): string[] {
   try {
-    const raw = localStorage.getItem(TODO_ORDER_KEY);
+    const raw = localStorage.getItem(TODO_COLUMN_ORDER_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
@@ -258,17 +303,18 @@ export function loadTodoOrder(): string[] {
   }
 }
 
-export function saveTodoOrder(order: string[]): void {
+export function saveTodoColumnOrder(order: string[]): void {
   try {
-    localStorage.setItem(TODO_ORDER_KEY, JSON.stringify(order));
+    localStorage.setItem(TODO_COLUMN_ORDER_KEY, JSON.stringify(order));
   } catch {
     // 無視
   }
 }
 
-export function loadAssignmentTodoPins(): string[] {
+// TODOカラムへユーザーが送った課題のID一覧（自動移動はせず、すべて手動操作で管理する）。
+export function loadTodoColumnAssignmentIds(): string[] {
   try {
-    const raw = localStorage.getItem(ASSIGNMENT_TODO_PINS_KEY);
+    const raw = localStorage.getItem(TODO_COLUMN_ASSIGNMENTS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
@@ -277,47 +323,44 @@ export function loadAssignmentTodoPins(): string[] {
   }
 }
 
-export function saveAssignmentTodoPins(ids: string[]): void {
+export function saveTodoColumnAssignmentIds(ids: string[]): void {
   try {
-    localStorage.setItem(ASSIGNMENT_TODO_PINS_KEY, JSON.stringify(ids));
+    localStorage.setItem(TODO_COLUMN_ASSIGNMENTS_KEY, JSON.stringify(ids));
   } catch {
     // 無視
   }
 }
 
-// 手動で課題画面に戻した課題（期限1週間以内でも自動でTODOへ移動させない）。
-export function loadAssignmentKeep(): string[] {
+function isTodoViewMode(value: string | null): value is TodoViewMode {
+  return value === 'list' || value === 'text';
+}
+
+export function loadTodoViewMode(): TodoViewMode {
   try {
-    const raw = localStorage.getItem(ASSIGNMENT_KEEP_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    const saved = localStorage.getItem(TODO_VIEW_MODE_KEY);
+    return isTodoViewMode(saved) ? saved : 'text';
   } catch {
-    return [];
+    return 'text';
   }
 }
 
-export function saveAssignmentKeep(ids: string[]): void {
+export function saveTodoViewMode(mode: TodoViewMode): void {
   try {
-    localStorage.setItem(ASSIGNMENT_KEEP_KEY, JSON.stringify(ids));
+    localStorage.setItem(TODO_VIEW_MODE_KEY, mode);
   } catch {
     // 無視
   }
 }
 
-export function clampColumnWidth(width: number): number {
-  return Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, Math.round(width)));
-}
-
-export function loadColumnWidths(): Partial<Record<ColumnKey, number>> {
+export function loadColumnShares(): Partial<Record<ColumnKey, number>> {
   try {
-    const raw = localStorage.getItem(COLUMN_WIDTHS_KEY);
+    const raw = localStorage.getItem(COLUMN_SHARES_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const result: Partial<Record<ColumnKey, number>> = {};
     for (const key of ['assignment', 'todo', 'done'] as ColumnKey[]) {
       const value = parsed[key];
-      if (typeof value === 'number' && Number.isFinite(value)) result[key] = clampColumnWidth(value);
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) result[key] = value;
     }
     return result;
   } catch {
@@ -325,9 +368,9 @@ export function loadColumnWidths(): Partial<Record<ColumnKey, number>> {
   }
 }
 
-export function saveColumnWidths(widths: Partial<Record<ColumnKey, number>>): void {
+export function saveColumnShares(shares: Partial<Record<ColumnKey, number>>): void {
   try {
-    localStorage.setItem(COLUMN_WIDTHS_KEY, JSON.stringify(widths));
+    localStorage.setItem(COLUMN_SHARES_KEY, JSON.stringify(shares));
   } catch {
     // 無視
   }
