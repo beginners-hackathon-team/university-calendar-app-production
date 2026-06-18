@@ -948,9 +948,11 @@ function initOnDomReady() {
       window.location.href = REGIST_LIST_URL
     }))
     bugPanel.appendChild(makePanelNavBtn('時間割へ', async () => {
-      sessionStorage.setItem(PENDING_ACTION_KEY, 'return')
-      window.location.href = REGIST_LIST_URL
+      const quarter = PANEL_QUARTER_NUM[getPanelCurrentQuarter()]
+      await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', quarter })
     }))
+
+    void appendCourseList(bugPanel)
   }
 
   // LMS ページ → サイドパネル（時間割へ / タスクへ / 授業一覧）

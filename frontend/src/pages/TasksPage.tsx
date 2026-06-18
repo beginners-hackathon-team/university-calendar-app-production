@@ -325,7 +325,7 @@ export default function TasksPage() {
       const todo = await createTodo(title);
       setTodos(prev => [...prev, todo]);
       setTodoColumnOrder(prev => {
-        const next = [...prev, `todo:${todo.id}`];
+        const next = [`todo:${todo.id}`, ...prev];
         saveTodoColumnOrder(next);
         return next;
       });
