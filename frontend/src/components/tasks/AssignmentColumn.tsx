@@ -314,7 +314,7 @@ function AssignmentListItem({
             )}
           </div>
 
-          {isEditing ? (
+          {isEditing && !isMobile ? (
             <textarea
               ref={textareaRef}
               value={draft}
@@ -355,13 +355,13 @@ function AssignmentListItem({
           ) : (
             <div
               onClick={(e) => {
-                if (isMobile) e.stopPropagation();
+                if (isMobile) { e.stopPropagation(); return; }
                 pendingFocusRef.current = true;
                 setIsEditing(true);
               }}
               className="text-[13.5px] font-semibold"
               style={{
-                cursor: 'text',
+                cursor: isMobile ? 'default' : 'text',
                 color: 'var(--c-text-1)',
                 lineHeight: '1.55',
                 minHeight: isMobile ? undefined : '1.55em',
@@ -399,55 +399,25 @@ function AssignmentListItem({
 
       {/* Mobile action menu — expands below card content */}
       {isMobile && showButtons && (
-        <div
-          onClick={e => e.stopPropagation()}
+        <MobileMenu
           onPointerDown={e => e.stopPropagation()}
-          style={{
-            marginTop: 6,
-            marginLeft: -10,
-            marginRight: -10,
-            marginBottom: -6,
-            borderTop: '1px solid var(--c-border)',
-          }}
+          onClick={e => e.stopPropagation()}
         >
-          <button
-            type="button"
+          <MobileMenuItem
             onPointerDown={e => e.stopPropagation()}
             onClick={() => { onMoveToTodo(); setExpanded(false); }}
-            className="text-[14px] font-medium"
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '12px 14px',
-              textAlign: 'left',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--c-text-1)',
-              cursor: 'pointer',
-            }}
+            trailing="→"
           >
             TODOへ
-          </button>
-          <button
-            type="button"
+          </MobileMenuItem>
+          <MobileMenuItem
             onPointerDown={e => e.stopPropagation()}
             onClick={() => { onMoveToDone(); setExpanded(false); }}
-            className="text-[14px] font-medium"
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '12px 14px',
-              textAlign: 'left',
-              background: 'transparent',
-              border: 'none',
-              borderTop: '1px solid var(--c-border)',
-              color: 'var(--c-text-1)',
-              cursor: 'pointer',
-            }}
+            trailing="→"
           >
             完了へ
-          </button>
-        </div>
+          </MobileMenuItem>
+        </MobileMenu>
       )}
     </div>
   );
@@ -481,6 +451,80 @@ function ActionButton({
       }}
     >
       {children}
+    </button>
+  );
+}
+
+export function MobileMenu({
+  children,
+  onClick,
+  onPointerDown,
+}: {
+  children: React.ReactNode;
+  onClick?: React.MouseEventHandler;
+  onPointerDown?: React.PointerEventHandler;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+      style={{
+        marginTop: 6,
+        marginLeft: -10,
+        marginRight: -10,
+        marginBottom: -6,
+        borderTop: '1px solid var(--c-border)',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function MobileMenuItem({
+  children,
+  onClick,
+  onPointerDown,
+  leading,
+  trailing,
+  danger,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
+  leading?: string;
+  trailing?: string;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onPointerDown={onPointerDown}
+      onClick={onClick}
+      className="text-[14px] font-medium"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        padding: '12px 16px',
+        background: 'transparent',
+        border: 'none',
+        borderTop: '1px solid var(--c-border)',
+        color: danger ? 'var(--c-danger)' : 'var(--c-text-1)',
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {leading && (
+          <span style={{ fontSize: 13, opacity: 0.55, fontWeight: 400 }}>{leading}</span>
+        )}
+        {children}
+      </span>
+      {trailing && (
+        <span style={{ fontSize: 13, opacity: 0.45, fontWeight: 400 }}>{trailing}</span>
+      )}
     </button>
   );
 }

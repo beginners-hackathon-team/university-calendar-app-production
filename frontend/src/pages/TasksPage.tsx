@@ -894,7 +894,7 @@ export default function TasksPage() {
             />
 
             <DragOverlay
-              dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+              dropAnimation={null}
               modifiers={[snapToPointerModifier]}
             >
               {overlayLabel && (

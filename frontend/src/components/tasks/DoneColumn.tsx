@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { type DoneItem, buildAssignmentHref, formatCourseName, formatDateTime, formatRemainingDeadline } from '../../lib/tasksBoard';
+import { type DoneItem, buildAssignmentHref, formatCourseName, formatDateTime } from '../../lib/tasksBoard';
 import { ColumnHeader, ColumnShell, EmptyState, getTextRowStyle } from './ui';
+import { MobileMenu, MobileMenuItem } from './AssignmentColumn';
 
 type Props = {
   items: DoneItem[];
@@ -158,9 +159,6 @@ function DoneCard({
       onMouseLeave={() => setHovered(false)}
       onClick={isMobile ? () => setExpanded(v => !v) : undefined}
       style={{
-        display: 'grid',
-        gridTemplateColumns: '22px minmax(0, 1fr)',
-        gap: 8,
         padding: '6px 10px',
         cursor: 'grab',
         touchAction: isMobile ? 'pan-y' : 'none',
@@ -175,108 +173,145 @@ function DoneCard({
         ...getTextRowStyle(item.kind === 'assignment' ? 'assignment' : 'todo', { selected: isEditing, isDragging, variant: 'list' }),
       }}
     >
-      <div />
-      <div style={{ minWidth: 0 }}>
-        {item.kind === 'assignment' && (
-          <div className="text-[12px]" style={{ marginBottom: 1 }}>
-            {lmsHref ? (
-              <a
-                href={lmsHref}
-                target="webclass"
-                rel="noopener noreferrer"
-                onPointerDown={e => e.stopPropagation()}
-                className="font-semibold"
-                style={{ color: 'var(--c-accent)', textDecoration: 'none' }}
-              >
-                {courseName || 'LMSで開く'}
-              </a>
-            ) : (
-              <span style={{ color: 'var(--c-text-3)' }}>{courseName || '授業未設定'}</span>
-            )}
-          </div>
-        )}
-
-        {isEditing && onChangeTitle ? (
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            rows={1}
-            onPointerDown={e => e.stopPropagation()}
-            onChange={e => {
-              setDraft(e.target.value);
-              scheduleCommit(e.target.value);
-            }}
-            onBlur={() => {
-              setIsEditing(false);
-              if (debounceRef.current) window.clearTimeout(debounceRef.current);
-              commitTitle(draft);
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            className="text-[13.5px] font-semibold"
-            style={{
-              display: 'block',
-              width: '100%',
-              resize: 'none',
-              border: '1.5px solid var(--c-accent)',
-              borderRadius: 4,
-              outline: 'none',
-              background: 'transparent',
-              lineHeight: '1.55',
-              padding: '2px 5px',
-              fontFamily: 'inherit',
-              overflow: 'hidden',
-              color: 'var(--c-text-1)',
-            }}
-          />
-        ) : (
-          <div
-            onClick={(e) => {
-              if (!onChangeTitle) return;
-              if (isMobile) e.stopPropagation();
-              pendingFocusRef.current = true;
-              setIsEditing(true);
-            }}
-            className="text-[13.5px] font-semibold"
-            style={{
-              cursor: onChangeTitle ? 'text' : 'default',
-              color: 'var(--c-text-3)',
-              lineHeight: '1.55',
-              minHeight: isMobile ? undefined : '1.55em',
-              wordBreak: 'break-word',
-              display: isMobile ? 'inline-block' : 'block',
-            }}
-          >
-            {draft}
-          </div>
-        )}
-
-        <div className="text-[11px]" style={{ color: 'var(--c-text-3)', marginTop: 1 }}>
-          {formatDateTime(item.data.done_at) ?? '完了'}
-        </div>
-
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            display: 'flex',
-            gap: 4,
-            marginTop: 4,
-            opacity: showButtons ? 1 : 0,
-            pointerEvents: showButtons ? 'auto' : 'none',
-            transition: 'opacity 0.12s',
-          }}
-        >
-          {onMoveToAssignment && (
-            <DoneActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToAssignment}>←課題</DoneActionButton>
+      {/* Content grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr)', gap: 8 }}>
+        <div />
+        <div style={{ minWidth: 0 }}>
+          {item.kind === 'assignment' && (
+            <div className="text-[12px]" style={{ marginBottom: 1 }}>
+              {lmsHref ? (
+                <a
+                  href={lmsHref}
+                  target="webclass"
+                  rel="noopener noreferrer"
+                  onPointerDown={e => e.stopPropagation()}
+                  className="font-semibold"
+                  style={{ color: 'var(--c-accent)', textDecoration: 'none' }}
+                >
+                  {courseName || 'LMSで開く'}
+                </a>
+              ) : (
+                <span style={{ color: 'var(--c-text-3)' }}>{courseName || '授業未設定'}</span>
+              )}
+            </div>
           )}
-          <DoneActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToTodo}>←Todo</DoneActionButton>
-          <DoneActionButton danger disabled={busy} onPointerDown={e => e.stopPropagation()} onClick={onDelete}>削除</DoneActionButton>
+
+          {isEditing && onChangeTitle && !isMobile ? (
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              rows={1}
+              onPointerDown={e => e.stopPropagation()}
+              onChange={e => {
+                setDraft(e.target.value);
+                scheduleCommit(e.target.value);
+              }}
+              onBlur={() => {
+                setIsEditing(false);
+                if (debounceRef.current) window.clearTimeout(debounceRef.current);
+                commitTitle(draft);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+              className="text-[13.5px] font-semibold"
+              style={{
+                display: 'block',
+                width: '100%',
+                resize: 'none',
+                border: '1.5px solid var(--c-accent)',
+                borderRadius: 4,
+                outline: 'none',
+                background: 'transparent',
+                lineHeight: '1.55',
+                padding: '2px 5px',
+                fontFamily: 'inherit',
+                overflow: 'hidden',
+                color: 'var(--c-text-1)',
+              }}
+            />
+          ) : (
+            <div
+              onClick={(e) => {
+                if (!onChangeTitle || isMobile) { if (isMobile) e.stopPropagation(); return; }
+                pendingFocusRef.current = true;
+                setIsEditing(true);
+              }}
+              className="text-[13.5px] font-semibold"
+              style={{
+                cursor: (onChangeTitle && !isMobile) ? 'text' : 'default',
+                color: 'var(--c-text-3)',
+                lineHeight: '1.55',
+                minHeight: isMobile ? undefined : '1.55em',
+                wordBreak: 'break-word',
+                display: isMobile ? 'inline-block' : 'block',
+              }}
+            >
+              {draft}
+            </div>
+          )}
+
+          <div className="text-[11px]" style={{ color: 'var(--c-text-3)', marginTop: 1 }}>
+            {formatDateTime(item.data.done_at) ?? '完了'}
+          </div>
+
+          {/* Desktop-only inline buttons */}
+          {!isMobile && (
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'flex',
+                gap: 4,
+                marginTop: 4,
+                opacity: showButtons ? 1 : 0,
+                pointerEvents: showButtons ? 'auto' : 'none',
+                transition: 'opacity 0.12s',
+              }}
+            >
+              {onMoveToAssignment && (
+                <DoneActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToAssignment}>←課題</DoneActionButton>
+              )}
+              <DoneActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToTodo}>←Todo</DoneActionButton>
+              <DoneActionButton danger disabled={busy} onPointerDown={e => e.stopPropagation()} onClick={onDelete}>削除</DoneActionButton>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Mobile action menu */}
+      {isMobile && showButtons && (
+        <MobileMenu
+          onClick={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
+        >
+          {onMoveToAssignment && (
+            <MobileMenuItem
+              onPointerDown={e => e.stopPropagation()}
+              onClick={() => { onMoveToAssignment(); setExpanded(false); }}
+              leading="←"
+            >
+              課題へ
+            </MobileMenuItem>
+          )}
+          <MobileMenuItem
+            onPointerDown={e => e.stopPropagation()}
+            onClick={() => { onMoveToTodo(); setExpanded(false); }}
+            leading="←"
+          >
+            TODOへ
+          </MobileMenuItem>
+          <MobileMenuItem
+            onPointerDown={e => e.stopPropagation()}
+            onClick={() => { onDelete(); setExpanded(false); }}
+            danger
+          >
+            削除
+          </MobileMenuItem>
+        </MobileMenu>
+      )}
     </div>
   );
 }

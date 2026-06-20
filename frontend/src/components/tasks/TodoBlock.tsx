@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Assignment, Todo } from '../../api/tasks';
+import { MobileMenu, MobileMenuItem } from './AssignmentColumn';
 import {
   type TodoColumnItem,
   buildAssignmentHref,
@@ -157,9 +158,6 @@ export default function TodoBlock({
           outlineOffset: -2,
           borderRadius: 8,
         } : {}),
-        display: 'grid',
-        gridTemplateColumns: '22px minmax(0, 1fr)',
-        gap: 8,
         padding: '6px 10px',
         ...getTextRowStyle(item.type, { selected: focused, variant }),
       }
@@ -174,6 +172,69 @@ export default function TodoBlock({
         background: hovered || focused ? 'rgba(15, 23, 42, 0.045)' : 'transparent',
       };
 
+  const lineNumberCell = (
+    <div
+      className="text-[11px]"
+      style={{
+        color: 'var(--c-text-3)',
+        textAlign: 'right',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        userSelect: 'none',
+        lineHeight: '1.55',
+      }}
+    >
+      {lineNumber ?? ''}
+    </div>
+  );
+
+  const contentCell = (
+    <div style={{ minWidth: 0 }}>
+      {item.type === 'assignment' ? (
+        <AssignmentBlockContent
+          assignment={item.assignment}
+          systemTypes={systemTypes}
+          variant={variant}
+          isMobile={isMobile}
+          expanded={expanded}
+          onExpand={() => setExpanded(true)}
+          autoFocus={autoFocus}
+          caret={caret}
+          focusField={focusField}
+          hovered={hovered}
+          onConsumeFocus={onConsumeFocus}
+          onChangeTaskName={onChangeAssignmentTitle}
+          onCreateBelow={onCreateBelow}
+          onCreateBefore={onCreateBefore}
+          onNavigate={onNavigate}
+          onMoveToAssignment={onMoveAssignmentToAssignment}
+          onMoveToDone={onMoveAssignmentToDone}
+        />
+      ) : (
+        <TodoBlockContent
+          todo={item.todo}
+          busy={busy}
+          isLast={isLast}
+          variant={variant}
+          isMobile={isMobile}
+          expanded={expanded}
+          onExpand={() => setExpanded(true)}
+          autoFocus={autoFocus}
+          caret={caret}
+          hovered={hovered}
+          focused={focused}
+          onFocusChange={setFocused}
+          onConsumeFocus={onConsumeFocus}
+          onChangeTitle={onChangeTitle}
+          onCreateBelow={onCreateBelow}
+          onDeleteBlock={onDeleteBlock}
+          onNavigate={onNavigate}
+          onEnsureTrailingBlock={onEnsureTrailingBlock}
+          onMoveToDone={onMoveTodoToDone}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div
       ref={setNodeRef}
@@ -185,63 +246,64 @@ export default function TodoBlock({
       onMouseLeave={() => setHovered(false)}
       onClick={isMobile && isListVariant ? () => setExpanded(v => !v) : undefined}
     >
-      <div
-        className="text-[11px]"
-        style={{
-          color: 'var(--c-text-3)',
-          textAlign: 'right',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          userSelect: 'none',
-          lineHeight: '1.55',
-        }}
-      >
-        {lineNumber ?? ''}
-      </div>
-      <div style={{ minWidth: 0 }}>
-        {item.type === 'assignment' ? (
-          <AssignmentBlockContent
-            assignment={item.assignment}
-            systemTypes={systemTypes}
-            variant={variant}
-            isMobile={isMobile}
-            expanded={expanded}
-            onExpand={() => setExpanded(true)}
-            autoFocus={autoFocus}
-            caret={caret}
-            focusField={focusField}
-            hovered={hovered}
-            onConsumeFocus={onConsumeFocus}
-            onChangeTaskName={onChangeAssignmentTitle}
-            onCreateBelow={onCreateBelow}
-            onCreateBefore={onCreateBefore}
-            onNavigate={onNavigate}
-            onMoveToAssignment={onMoveAssignmentToAssignment}
-            onMoveToDone={onMoveAssignmentToDone}
-          />
-        ) : (
-          <TodoBlockContent
-            todo={item.todo}
-            busy={busy}
-            isLast={isLast}
-            variant={variant}
-            isMobile={isMobile}
-            expanded={expanded}
-            onExpand={() => setExpanded(true)}
-            autoFocus={autoFocus}
-            caret={caret}
-            hovered={hovered}
-            focused={focused}
-            onFocusChange={setFocused}
-            onConsumeFocus={onConsumeFocus}
-            onChangeTitle={onChangeTitle}
-            onCreateBelow={onCreateBelow}
-            onDeleteBlock={onDeleteBlock}
-            onNavigate={onNavigate}
-            onEnsureTrailingBlock={onEnsureTrailingBlock}
-            onMoveToDone={onMoveTodoToDone}
-          />
-        )}
-      </div>
+      {isListVariant ? (
+        <>
+          {/* Inner content grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr)', gap: 8 }}>
+            {lineNumberCell}
+            {contentCell}
+          </div>
+          {/* Mobile expand menu */}
+          {isMobile && expanded && !isDragging && (
+            <MobileMenu
+              onClick={e => e.stopPropagation()}
+              onPointerDown={e => e.stopPropagation()}
+            >
+              {item.type === 'assignment' && onMoveAssignmentToAssignment && (
+                <MobileMenuItem
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => { onMoveAssignmentToAssignment(); setExpanded(false); }}
+                  leading="←"
+                >
+                  課題へ
+                </MobileMenuItem>
+              )}
+              {item.type === 'assignment' && onMoveAssignmentToDone && (
+                <MobileMenuItem
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => { onMoveAssignmentToDone(); setExpanded(false); }}
+                  trailing="→"
+                >
+                  完了へ
+                </MobileMenuItem>
+              )}
+              {item.type === 'todo' && onMoveTodoToDone && (
+                <MobileMenuItem
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => { onMoveTodoToDone(); setExpanded(false); }}
+                  trailing="→"
+                >
+                  完了へ
+                </MobileMenuItem>
+              )}
+              {item.type === 'todo' && (
+                <MobileMenuItem
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => { onDeleteBlock(item.todo.id, false); setExpanded(false); }}
+                  danger
+                >
+                  削除
+                </MobileMenuItem>
+              )}
+            </MobileMenu>
+          )}
+        </>
+      ) : (
+        <>
+          {lineNumberCell}
+          {contentCell}
+        </>
+      )}
     </div>
   );
 }
@@ -415,13 +477,13 @@ function AssignmentBlockContent({
         ) : (
           <div
             onClick={(e) => {
-              if (isMobile) e.stopPropagation();
+              if (isMobile) { e.stopPropagation(); return; }
               pendingFocusRef.current = 'end';
               setIsListTitleEditing(true);
             }}
             className="text-[13.5px] font-semibold"
             style={{
-              cursor: 'text',
+              cursor: isMobile ? 'default' : 'text',
               color: 'var(--c-text-1)',
               lineHeight: '1.55',
               minHeight: isMobile ? undefined : '1.55em',
@@ -437,15 +499,15 @@ function AssignmentBlockContent({
           {deadline.label}
         </div>
 
-        {(onMoveToAssignment || onMoveToDone) && (
+        {!isMobile && (onMoveToAssignment || onMoveToDone) && (
           <div
             onClick={e => e.stopPropagation()}
             style={{
               display: 'flex',
               gap: 4,
               marginTop: 4,
-              opacity: isMobile ? (expanded && !isListTitleEditing ? 1 : 0) : (hovered && !isListTitleEditing ? 1 : 0),
-              pointerEvents: isMobile ? (expanded && !isListTitleEditing ? 'auto' : 'none') : (hovered && !isListTitleEditing ? 'auto' : 'none'),
+              opacity: hovered && !isListTitleEditing ? 1 : 0,
+              pointerEvents: hovered && !isListTitleEditing ? 'auto' : 'none',
               transition: 'opacity 0.12s',
             }}
           >
@@ -762,8 +824,8 @@ function TodoBlockContent({
     }
   };
 
-  const showDelete = isMobile ? expanded : (hovered || focused);
-  const showMoveButtons = isMobile ? (expanded && !isListEditing && variant === 'list') : ((hovered || focused) && !isListEditing && variant === 'list');
+  const showDelete = isMobile ? false : (hovered || focused);
+  const showMoveButtons = isMobile ? false : ((hovered || focused) && !isListEditing && variant === 'list');
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 6 }}>
