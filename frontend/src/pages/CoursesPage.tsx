@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { periodToTime } from '../periodToTime';
 import { fetchCourses } from '../api/courses';
 import { buildPortalRegistListUrl, buildAcanthusSsoUrl } from '../lib/universityUrls';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const CURRENT_YEAR = 2026;
 
@@ -44,6 +45,7 @@ export default function CoursesPage() {
   const [intensiveCourses, setIntensiveCourses] = useState<Course[]>([]);
   const [selectedYear] = useState(CURRENT_YEAR);
   const [selectedQuarter, setSelectedQuarter] = useState(getCurrentQuarter);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -75,64 +77,55 @@ export default function CoursesPage() {
   const days = ['月', '火', '水', '木', '金', '土'];
   const periods = periodToTime;
 
+  // Mobile: period col = 30px, Mon-Fri fit screen exactly, Sat scrollable off-screen
+  const periodColWidth = isMobile ? 30 : 60;
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--c-bg)' }}>
-      <div className="mx-auto px-3 py-5 sm:px-5 sm:py-10" style={{ maxWidth: 1240 }}>
+      <div className="mx-auto px-3 py-4 sm:px-5 sm:py-8" style={{ maxWidth: 1240 }}>
 
-        {/* Page header */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
-          <div>
-            <h1
-              className="font-bold text-[23px]"
-              style={{ color: 'var(--c-text-1)', letterSpacing: '-0.025em' }}
-            >
-              時間割
-            </h1>
-            <p className="text-[13px] mt-0.5" style={{ color: 'var(--c-text-3)' }}>
-              {selectedYear}年度
-            </p>
+        {/* Compact header: year + quarter selector + register link */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <span className="text-[13px] font-medium" style={{ color: 'var(--c-text-3)' }}>
+            {selectedYear}年度
+          </span>
+
+          {/* Quarter selector */}
+          <div
+            className="flex gap-1 p-1"
+            style={{ background: '#ECEEF2', borderRadius: 12 }}
+          >
+            {([1, 2, 3, 4] as const).map(q => (
+              <button
+                key={q}
+                onClick={() => setSelectedQuarter(q)}
+                className="font-semibold text-[13px] transition-all duration-150"
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 9,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: selectedQuarter === q ? '#fff' : 'transparent',
+                  color: selectedQuarter === q ? 'var(--c-accent)' : 'var(--c-text-3)',
+                  boxShadow: selectedQuarter === q ? '0 1px 4px rgba(0,0,0,0.09)' : 'none',
+                }}
+              >
+                Q{q}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Segmented quarter selector */}
-            <div
-              className="flex gap-1 p-1"
-              style={{
-                background: '#ECEEF2',
-                borderRadius: 12,
-              }}
-            >
-              {([1, 2, 3, 4] as const).map(q => (
-                <button
-                  key={q}
-                  onClick={() => setSelectedQuarter(q)}
-                  className="font-semibold text-[13px] transition-all duration-150"
-                  style={{
-                    padding: '6px 16px',
-                    borderRadius: 9,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: selectedQuarter === q ? '#fff' : 'transparent',
-                    color: selectedQuarter === q ? 'var(--c-accent)' : 'var(--c-text-3)',
-                    boxShadow: selectedQuarter === q ? '0 1px 4px rgba(0,0,0,0.09)' : 'none',
-                  }}
-                >
-                  Q{q}
-                </button>
-              ))}
-            </div>
-
-            {/* Portal registration link — most prominent element */}
-            <a
-              href={buildPortalRegistListUrl(QUARTER_PORTAL[selectedQuarter] ?? 'Q1')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ku-portal-btn"
-            >
-              時間割登録
-              <ArrowUpRight />
-            </a>
-          </div>
+          {/* Portal registration link — compact */}
+          <a
+            href={buildPortalRegistListUrl(QUARTER_PORTAL[selectedQuarter] ?? 'Q1')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ku-portal-btn"
+            style={{ padding: '5px 10px', fontSize: 12 }}
+          >
+            時間割登録
+            <ArrowUpRight />
+          </a>
         </div>
 
         {/* Timetable card */}
@@ -145,28 +138,45 @@ export default function CoursesPage() {
           }}
         >
           <div className="overflow-x-auto">
-            <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', minWidth: 560 }}>
+            <table
+              style={{
+                borderCollapse: 'collapse',
+                // Mobile: table is wider than viewport so Mon-Fri fills screen and Sat is off-screen
+                width: isMobile ? `calc(120vw - 6px)` : '100%',
+                tableLayout: 'fixed',
+                minWidth: isMobile ? undefined : 560,
+              }}
+            >
               <colgroup>
-                <col style={{ width: 60 }} />
-                {days.map(d => <col key={d} style={{ minWidth: 84 }} />)}
+                <col style={{ width: periodColWidth }} />
+                {days.map(d => (
+                  <col
+                    key={d}
+                    style={{
+                      width: isMobile ? `calc((100vw - 30px) / 5)` : undefined,
+                      minWidth: isMobile ? undefined : 84,
+                    }}
+                  />
+                ))}
               </colgroup>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--c-border)' }}>
                   <th
-                    className="py-3 text-[11px] font-semibold"
+                    className="py-2 text-[11px] font-semibold"
                     style={{
                       color: 'var(--c-text-3)',
                       textAlign: 'center',
                       borderRight: '1px solid var(--c-border)',
                       background: '#FAFBFC',
+                      ...(isMobile ? { position: 'sticky', left: 0, zIndex: 3 } : {}),
                     }}
                   >
-                    時限
+                    {isMobile ? '' : '時限'}
                   </th>
                   {days.map(day => (
                     <th
                       key={day}
-                      className="py-3 text-[13px] font-semibold"
+                      className="py-2 text-[13px] font-semibold"
                       style={{
                         textAlign: 'center',
                         color: 'var(--c-text-2)',
@@ -189,19 +199,22 @@ export default function CoursesPage() {
                     <td
                       className="text-center align-top"
                       style={{
-                        padding: '10px 4px',
+                        padding: isMobile ? '6px 2px' : '10px 4px',
                         borderRight: '1px solid var(--c-border)',
                         background: '#FAFBFC',
+                        ...(isMobile ? { position: 'sticky', left: 0, zIndex: 1 } : {}),
                       }}
                     >
-                      <div className="text-[13px] font-bold" style={{ color: 'var(--c-text-2)' }}>
+                      <div className={isMobile ? 'text-[11px] font-bold' : 'text-[13px] font-bold'} style={{ color: 'var(--c-text-2)' }}>
                         {pData.period}
                       </div>
-                      <div className="text-[9px] mt-1 leading-relaxed" style={{ color: 'var(--c-text-3)' }}>
-                        {pData.start}
-                        <br />–<br />
-                        {pData.end}
-                      </div>
+                      {!isMobile && (
+                        <div className="text-[9px] mt-1 leading-relaxed" style={{ color: 'var(--c-text-3)' }}>
+                          {pData.start}
+                          <br />–<br />
+                          {pData.end}
+                        </div>
+                      )}
                     </td>
 
                     {/* Day cells */}
@@ -232,7 +245,7 @@ export default function CoursesPage() {
 
         {/* Intensive courses */}
         {intensiveCourses.length > 0 && (
-          <div className="mt-8">
+          <div className="mt-6">
             <h2
               className="text-[14px] font-semibold mb-4"
               style={{ color: 'var(--c-text-2)' }}
@@ -271,7 +284,6 @@ function CourseCell({ course, compact = false }: { course: Course; compact?: boo
     textDecoration: 'none',
     cursor: lmsUrl ? 'pointer' : 'default',
     transition: lmsUrl ? 'border-color 0.12s, background 0.12s' : undefined,
-    // 横書き強制 — Safari/iPhone でも縦書きにならないように明示する
     writingMode: 'horizontal-tb',
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',

@@ -11,20 +11,6 @@ const ACCENT_HOVER = "#3A70E2";
 
 /* ── Icons ─────────────────────────────────────────────────── */
 
-function LogoMark() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-      <rect x="1" y="2.5" width="13" height="11" rx="2.2" stroke="white" strokeWidth="1.4" />
-      <path d="M1 6.5h13" stroke="white" strokeWidth="1.4" />
-      <path d="M4.5 1v3M10.5 1v3" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="5" cy="10" r="1" fill="white" />
-      <circle cx="7.5" cy="10" r="1" fill="white" />
-      <circle cx="10" cy="10" r="1" fill="white" />
-    </svg>
-  );
-}
-
-
 function UserCircle({ initial }: { initial: string }) {
   return (
     <span className="w-full h-full flex items-center justify-center text-[13px] font-semibold text-white select-none">
@@ -116,13 +102,11 @@ export default function Layout() {
   const handleSetSyncMode = async (mode: 'auto' | 'manual') => {
     setSyncMode(mode);
     await updateAssignmentSyncMode(mode);
-    console.log('[syncMode] updated to:', mode);
   };
 
   useEffect(() => {
     if (me?.assignment_sync_mode) {
       setSyncMode(me.assignment_sync_mode);
-      console.log('[syncMode] loaded from DB:', me.assignment_sync_mode);
     }
   }, [me?.assignment_sync_mode]);
 
@@ -139,21 +123,33 @@ export default function Layout() {
     <>
       {/* ── Header ─────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-white" style={{ borderBottom: '1px solid var(--c-border)', boxShadow: '0 1px 0 rgba(0,0,0,0.03)' }}>
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 h-[60px] flex items-center gap-4">
+        <div className="max-w-[1280px] mx-auto px-3 sm:px-6 h-[52px] md:h-[60px] flex items-center gap-2 md:gap-4">
 
-          {/* Brand */}
+          {/* Mobile: inline nav tab buttons */}
+          <div className="md:hidden flex items-center gap-1">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={[
+                  "px-[13px] py-[7px] rounded-[8px] text-[14px] font-semibold transition-all duration-100",
+                  isActive(item.to)
+                    ? "text-[#111111] bg-[#F0F0F0]"
+                    : "text-[#888888]",
+                ].join(" ")}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Desktop: Brand */}
           <Link
             to="/"
-            className="flex items-center gap-[9px] flex-shrink-0 group mr-2"
+            className="hidden md:flex items-center gap-[9px] flex-shrink-0 group mr-2"
             aria-label="ホームへ"
           >
-            <div
-              className="w-[30px] h-[30px] rounded-[8px] flex items-center justify-center flex-shrink-0"
-              style={{ background: ACCENT }}
-            >
-              <LogoMark />
-            </div>
-            <span className="text-[15px] font-semibold text-[#111111] tracking-[-0.015em] hidden sm:block">
+            <span className="text-[15px] font-semibold text-[#111111] tracking-[-0.015em]">
               アカンサスカレンダー
             </span>
           </Link>
@@ -192,11 +188,11 @@ export default function Layout() {
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Right — Portal + User + Mobile toggle */}
-          <div className="flex items-center gap-2.5">
+          {/* Right */}
+          <div className="flex items-center gap-2">
 
-            {/* User Menu */}
-            <div ref={userMenuRef} className="relative">
+            {/* Desktop: User Menu */}
+            <div ref={userMenuRef} className="relative hidden md:block">
               <button
                 onClick={() => setUserMenuOpen((v) => !v)}
                 className={[
@@ -210,7 +206,7 @@ export default function Layout() {
                 <UserCircle initial={initial} />
               </button>
 
-              {/* Dropdown */}
+              {/* Desktop Dropdown */}
               {userMenuOpen && (
                 <div
                   className="absolute right-0 top-[calc(100%+10px)] w-[248px] bg-white rounded-[14px] border border-[#EBEBEB] z-50 overflow-hidden"
@@ -232,7 +228,6 @@ export default function Layout() {
                           }}
                           placeholder="ユーザー名"
                           className="w-full px-3 py-2 text-[13px] border border-[#E0E0E0] rounded-[8px] outline-none transition-all"
-                          style={{}}
                           onFocus={(e) => {
                             e.currentTarget.style.borderColor = ACCENT;
                             e.currentTarget.style.boxShadow = `0 0 0 3px rgba(75,130,245,0.15)`;
@@ -336,7 +331,7 @@ export default function Layout() {
               )}
             </div>
 
-            {/* Mobile hamburger */}
+            {/* Mobile: hamburger (opens drawer with nav + settings) */}
             <button
               onClick={() => setMobileNavOpen((v) => !v)}
               className="md:hidden w-9 h-9 flex items-center justify-center rounded-[8px] hover:bg-[#F4F4F4] transition-colors"
@@ -347,10 +342,11 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Mobile Nav Drawer */}
+        {/* Mobile Drawer (nav + settings) */}
         {mobileNavOpen && (
-          <div className="md:hidden border-t border-[#F0F0F0] bg-white">
-            <nav className="px-4 py-3 flex flex-col gap-1">
+          <div className="md:hidden border-t border-[#F0F0F0] bg-white max-h-[80vh] overflow-y-auto">
+            {/* Nav links */}
+            <nav className="px-4 pt-3 pb-1 flex flex-col gap-1">
               {navItems.map((item) => (
                 <Link
                   key={item.to}
@@ -381,6 +377,116 @@ export default function Layout() {
                 </Link>
               )}
             </nav>
+
+            {/* User settings */}
+            <div className="border-t border-[#F0F0F0] mt-1">
+              {/* User name */}
+              <div className="px-4 py-3 border-b border-[#F5F5F5]">
+                <p className="text-[10px] font-semibold text-[#BBBBBB] uppercase tracking-[0.07em] mb-2">
+                  ユーザー名
+                </p>
+                {editing ? (
+                  <div>
+                    <input
+                      autoFocus
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSave();
+                        if (e.key === "Escape") setEditing(false);
+                      }}
+                      placeholder="ユーザー名"
+                      className="w-full px-3 py-2 text-[13px] border border-[#E0E0E0] rounded-[8px] outline-none"
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={handleSave}
+                        className="flex-1 py-[8px] text-[13px] font-semibold text-white rounded-[8px]"
+                        style={{ background: ACCENT }}
+                      >
+                        保存
+                      </button>
+                      <button
+                        onClick={() => setEditing(false)}
+                        className="flex-1 py-[8px] text-[13px] font-medium bg-[#F4F4F4] text-[#555] rounded-[8px]"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[14px] font-semibold text-[#1A1A1A] truncate">
+                      {displayName ?? (
+                        <span className="text-[#AAAAAA] font-normal">未設定</span>
+                      )}
+                    </p>
+                    <button
+                      onClick={handleEditStart}
+                      className="text-[11px] text-[#888] bg-[#F4F4F4] px-[10px] py-[4px] rounded-[6px] flex-shrink-0 font-medium"
+                    >
+                      編集
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Home setting */}
+              <div className="px-4 py-3 border-b border-[#F5F5F5]">
+                <p className="text-[10px] font-semibold text-[#BBBBBB] uppercase tracking-[0.07em] mb-2">
+                  ホーム画面
+                </p>
+                <div className="flex gap-1.5">
+                  {HOME_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.path}
+                      onClick={() => handleSetHome(opt.path)}
+                      className={[
+                        "flex-1 flex items-center justify-center gap-1 py-[8px] text-[13px] font-medium rounded-[8px] transition-all",
+                        homePath === opt.path
+                          ? "bg-[#EEF3FE] text-[#4B82F5]"
+                          : "bg-[#F6F6F6] text-[#777]",
+                      ].join(" ")}
+                    >
+                      {homePath === opt.path && <CheckSmall />}
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sync mode */}
+              <div className="px-4 py-3 border-b border-[#F5F5F5]">
+                <p className="text-[10px] font-semibold text-[#BBBBBB] uppercase tracking-[0.07em] mb-2">
+                  課題取得
+                </p>
+                <div className="flex gap-1.5">
+                  {([{ value: 'auto', label: '自動' }, { value: 'manual', label: 'ボタン式' }] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleSetSyncMode(opt.value)}
+                      className={[
+                        "flex-1 flex items-center justify-center gap-1 py-[8px] text-[13px] font-medium rounded-[8px] transition-all",
+                        syncMode === opt.value
+                          ? "bg-[#EEF3FE] text-[#4B82F5]"
+                          : "bg-[#F6F6F6] text-[#777]",
+                      ].join(" ")}
+                    >
+                      {syncMode === opt.value && <CheckSmall />}
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Logout */}
+              <button
+                onClick={() => { void handleLogout(); setMobileNavOpen(false); }}
+                className="w-full text-left px-4 py-4 text-[14px] text-[#F04646] font-medium"
+              >
+                ログアウト
+              </button>
+            </div>
           </div>
         )}
       </header>

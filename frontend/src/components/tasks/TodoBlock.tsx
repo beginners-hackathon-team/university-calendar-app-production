@@ -140,6 +140,8 @@ export default function TodoBlock({
   const [hovered, setHovered] = useState(false);
   // Todo のテキストエリアにフォーカスがある間は「現在行」としてハイライトを出す。
   const [focused, setFocused] = useState(false);
+  // モバイルでカードをタップしたときにボタン類を展開する。
+  const [expanded, setExpanded] = useState(false);
 
   const isListVariant = variant === 'list';
 
@@ -177,6 +179,7 @@ export default function TodoBlock({
       title={isListVariant ? 'ドラッグして並び替え' : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={isMobile && isListVariant ? () => setExpanded(v => !v) : undefined}
     >
       <div
         className="text-[11px]"
@@ -197,6 +200,8 @@ export default function TodoBlock({
             systemTypes={systemTypes}
             variant={variant}
             isMobile={isMobile}
+            expanded={expanded}
+            onExpand={() => setExpanded(true)}
             autoFocus={autoFocus}
             caret={caret}
             focusField={focusField}
@@ -216,6 +221,8 @@ export default function TodoBlock({
             isLast={isLast}
             variant={variant}
             isMobile={isMobile}
+            expanded={expanded}
+            onExpand={() => setExpanded(true)}
             autoFocus={autoFocus}
             caret={caret}
             hovered={hovered}
@@ -244,6 +251,8 @@ function AssignmentBlockContent({
   systemTypes,
   variant,
   isMobile,
+  expanded = false,
+  onExpand,
   autoFocus = false,
   caret = 'end',
   focusField,
@@ -260,6 +269,8 @@ function AssignmentBlockContent({
   systemTypes: Record<string, string | null>;
   variant: TodoBlockVariant;
   isMobile?: boolean;
+  expanded?: boolean;
+  onExpand?: () => void;
   autoFocus?: boolean;
   caret?: CaretPos;
   focusField?: AssignmentFocusField;
@@ -399,7 +410,8 @@ function AssignmentBlockContent({
           />
         ) : (
           <div
-            onClick={() => {
+            onClick={(e) => {
+              if (isMobile) { e.stopPropagation(); onExpand?.(); }
               pendingFocusRef.current = 'end';
               setIsListTitleEditing(true);
             }}
@@ -422,12 +434,13 @@ function AssignmentBlockContent({
 
         {(onMoveToAssignment || onMoveToDone) && (
           <div
+            onClick={e => e.stopPropagation()}
             style={{
               display: 'flex',
               gap: 4,
               marginTop: 4,
-              opacity: (hovered || Boolean(isMobile)) && !isListTitleEditing ? 1 : 0,
-              pointerEvents: (hovered || Boolean(isMobile)) && !isListTitleEditing ? 'auto' : 'none',
+              opacity: isMobile ? (expanded && !isListTitleEditing ? 1 : 0) : (hovered && !isListTitleEditing ? 1 : 0),
+              pointerEvents: isMobile ? (expanded && !isListTitleEditing ? 'auto' : 'none') : (hovered && !isListTitleEditing ? 'auto' : 'none'),
               transition: 'opacity 0.12s',
             }}
           >
@@ -588,6 +601,8 @@ function TodoBlockContent({
   isLast,
   variant,
   isMobile,
+  expanded = false,
+  onExpand,
   autoFocus,
   caret,
   hovered,
@@ -606,6 +621,8 @@ function TodoBlockContent({
   isLast: boolean;
   variant: TodoBlockVariant;
   isMobile?: boolean;
+  expanded?: boolean;
+  onExpand?: () => void;
   autoFocus: boolean;
   caret: CaretPos;
   hovered: boolean;
@@ -740,8 +757,8 @@ function TodoBlockContent({
     }
   };
 
-  const showDelete = hovered || focused || Boolean(isMobile);
-  const showMoveButtons = (hovered || focused || Boolean(isMobile)) && !isListEditing && variant === 'list';
+  const showDelete = isMobile ? expanded : (hovered || focused);
+  const showMoveButtons = isMobile ? (expanded && !isListEditing && variant === 'list') : ((hovered || focused) && !isListEditing && variant === 'list');
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 6 }}>
@@ -784,7 +801,8 @@ function TodoBlockContent({
         ) : (
           // リストモード: 通常時はテキスト表示、クリックで編集開始。
           <div
-            onClick={() => {
+            onClick={(e) => {
+              if (isMobile) { e.stopPropagation(); onExpand?.(); }
               pendingFocusRef.current = 'end';
               setIsListEditing(true);
             }}
@@ -804,6 +822,7 @@ function TodoBlockContent({
         )}
         {onMoveToDone && (
           <div
+            onClick={e => e.stopPropagation()}
             style={{
               marginTop: 4,
               opacity: showMoveButtons ? 1 : 0,
@@ -819,7 +838,7 @@ function TodoBlockContent({
       <button
         type="button"
         disabled={busy}
-        onClick={() => onDeleteBlock(todo.id, false)}
+        onClick={(e) => { e.stopPropagation(); onDeleteBlock(todo.id, false); }}
         className="text-[13px]"
         aria-label="削除"
         title="削除"

@@ -105,6 +105,7 @@ function DoneCard({
   });
 
   const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(item.kind === 'assignment' ? item.data.task_name : item.data.title);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -143,7 +144,7 @@ function DoneCard({
     debounceRef.current = window.setTimeout(() => commitTitle(value), 300);
   };
 
-  const showButtons = (hovered || Boolean(isMobile)) && !isEditing;
+  const showButtons = isMobile ? (expanded && !isEditing) : (hovered && !isEditing);
 
   const lmsHref = item.kind === 'assignment' ? buildAssignmentHref(item.data, systemTypes) : undefined;
   const courseName = item.kind === 'assignment' ? formatCourseName(item.data.course_name) : undefined;
@@ -155,6 +156,7 @@ function DoneCard({
       {...listeners}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={isMobile ? () => setExpanded(v => !v) : undefined}
       style={{
         display: 'grid',
         gridTemplateColumns: '22px minmax(0, 1fr)',
@@ -228,8 +230,9 @@ function DoneCard({
           />
         ) : (
           <div
-            onClick={() => {
+            onClick={(e) => {
               if (!onChangeTitle) return;
+              if (isMobile) { e.stopPropagation(); setExpanded(true); }
               pendingFocusRef.current = true;
               setIsEditing(true);
             }}
@@ -251,6 +254,7 @@ function DoneCard({
         </div>
 
         <div
+          onClick={e => e.stopPropagation()}
           style={{
             display: 'flex',
             gap: 4,

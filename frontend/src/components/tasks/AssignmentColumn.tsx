@@ -227,6 +227,7 @@ function AssignmentListItem({
   onMoveToDone: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(assignment.task_name);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -267,7 +268,7 @@ function AssignmentListItem({
   const deadline = formatRemainingDeadline(assignment.availability_end);
   const courseName = formatCourseName(assignment.course_name);
 
-  const showButtons = (hovered || Boolean(isMobile)) && !isEditing;
+  const showButtons = isMobile ? (expanded && !isEditing) : (hovered && !isEditing);
 
   return (
     <div
@@ -276,6 +277,7 @@ function AssignmentListItem({
       {...listeners}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={isMobile ? () => setExpanded(v => !v) : undefined}
       style={{
         display: 'grid',
         gridTemplateColumns: '22px minmax(0, 1fr)',
@@ -347,7 +349,8 @@ function AssignmentListItem({
           />
         ) : (
           <div
-            onClick={() => {
+            onClick={(e) => {
+              if (isMobile) { e.stopPropagation(); setExpanded(true); }
               pendingFocusRef.current = true;
               setIsEditing(true);
             }}
@@ -369,6 +372,7 @@ function AssignmentListItem({
         </div>
 
         <div
+          onClick={e => e.stopPropagation()}
           style={{
             display: 'flex',
             gap: 4,

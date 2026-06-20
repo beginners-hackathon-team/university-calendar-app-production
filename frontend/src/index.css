@@ -76,6 +76,13 @@ body {
   box-shadow: 0 1px 4px rgba(75,130,245,0.20);
 }
 
+/* Prevent iOS Safari auto-zoom on input focus (font-size < 16px triggers zoom) */
+@media screen and (max-width: 639px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* Page loading spinner */
 @keyframes ku-spin {
   to { transform: rotate(360deg); }

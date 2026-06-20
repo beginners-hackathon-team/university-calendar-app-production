@@ -118,9 +118,14 @@ export default function TasksPage() {
 
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<ColumnKey>('assignment');
+  const touchStartX = useRef<number | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, {
+      activationConstraint: isMobile
+        ? { delay: 300, tolerance: 8 }
+        : { distance: 6 },
+    }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -738,11 +743,7 @@ export default function TasksPage() {
     <div className="min-h-screen" style={{ ...palette, background: 'var(--c-bg)' }}>
       <div className="mx-auto px-3 py-4 sm:px-5 sm:py-8" style={{ maxWidth: 1400 }}>
         <div className="mb-5">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h1 className="font-bold text-[23px]" style={{ color: 'var(--c-text-1)', letterSpacing: '-0.025em' }}>
-              タスク
-            </h1>
-
+          <div className="flex flex-wrap items-center justify-end gap-4 mb-4">
             {!isMobile && (
               <div className="flex gap-1 p-1" style={{ background: '#F3F4F6', borderRadius: 10 }}>
                 {TOGGLE_ORDER.map(key => (
@@ -842,6 +843,20 @@ export default function TasksPage() {
               setDropTargetColumn(null);
             }}
           >
+            <div
+              onTouchStart={isMobile ? (e) => { const t = e.touches[0]; if (t) touchStartX.current = t.clientX; } : undefined}
+              onTouchEnd={isMobile ? (e) => {
+                const touch = e.changedTouches[0];
+                if (touchStartX.current === null || !touch) return;
+                const delta = touch.clientX - touchStartX.current;
+                touchStartX.current = null;
+                if (Math.abs(delta) < 60) return;
+                const tabs: ColumnKey[] = ['assignment', 'todo', 'done'];
+                const idx = tabs.indexOf(mobileTab);
+                const next = delta < 0 ? tabs[idx + 1] : tabs[idx - 1];
+                if (next) setMobileTab(next);
+              } : undefined}
+            >
             <KanbanBoard
               isMobile={isMobile}
               visibleOrder={mobileVisibleOrder}
@@ -872,6 +887,7 @@ export default function TasksPage() {
               onMoveDoneAssignmentToTodo={handleMoveDoneAssignmentToTodo}
               onMoveDoneTodoToTodo={handleMoveDoneTodoToTodo}
             />
+            </div>
 
             <DragOverlay dropAnimation={null} modifiers={[snapToPointerModifier]}>
               {overlayLabel && (
