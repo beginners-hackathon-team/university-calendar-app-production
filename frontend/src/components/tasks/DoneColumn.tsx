@@ -163,10 +163,15 @@ function DoneCard({
         gap: 8,
         padding: '6px 10px',
         cursor: 'grab',
-        touchAction: 'none',
-        opacity: isDragging ? 0.5 : 1,
+        touchAction: isMobile ? 'pan-y' : 'none',
+        opacity: isDragging ? 0.08 : 1,
         transform: CSS.Transform.toString(transform),
         transition,
+        ...(isDragging ? {
+          outline: '2px dashed var(--c-accent)',
+          outlineOffset: -2,
+          borderRadius: 8,
+        } : {}),
         ...getTextRowStyle(item.kind === 'assignment' ? 'assignment' : 'todo', { selected: isEditing, isDragging, variant: 'list' }),
       }}
     >
@@ -232,7 +237,7 @@ function DoneCard({
           <div
             onClick={(e) => {
               if (!onChangeTitle) return;
-              if (isMobile) { e.stopPropagation(); setExpanded(true); }
+              if (isMobile) e.stopPropagation();
               pendingFocusRef.current = true;
               setIsEditing(true);
             }}
@@ -241,8 +246,9 @@ function DoneCard({
               cursor: onChangeTitle ? 'text' : 'default',
               color: 'var(--c-text-3)',
               lineHeight: '1.55',
-              minHeight: '1.55em',
+              minHeight: isMobile ? undefined : '1.55em',
               wordBreak: 'break-word',
+              display: isMobile ? 'inline-block' : 'block',
             }}
           >
             {draft}

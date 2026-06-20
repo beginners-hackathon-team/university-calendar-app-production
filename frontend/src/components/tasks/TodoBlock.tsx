@@ -150,9 +150,13 @@ export default function TodoBlock({
         transform: CSS.Transform.toString(transform),
         transition,
         cursor: 'grab',
-        touchAction: 'none',
-        // 課題・完了カラムと同じく透明度でドラッグ状態を表現（シャドウは使わない）。
-        opacity: isDragging ? 0.5 : 1,
+        touchAction: isMobile ? 'pan-y' : 'none',
+        opacity: isDragging ? 0.08 : 1,
+        ...(isDragging ? {
+          outline: '2px dashed var(--c-accent)',
+          outlineOffset: -2,
+          borderRadius: 8,
+        } : {}),
         display: 'grid',
         gridTemplateColumns: '22px minmax(0, 1fr)',
         gap: 8,
@@ -411,7 +415,7 @@ function AssignmentBlockContent({
         ) : (
           <div
             onClick={(e) => {
-              if (isMobile) { e.stopPropagation(); onExpand?.(); }
+              if (isMobile) e.stopPropagation();
               pendingFocusRef.current = 'end';
               setIsListTitleEditing(true);
             }}
@@ -420,8 +424,9 @@ function AssignmentBlockContent({
               cursor: 'text',
               color: 'var(--c-text-1)',
               lineHeight: '1.55',
-              minHeight: '1.55em',
+              minHeight: isMobile ? undefined : '1.55em',
               wordBreak: 'break-word',
+              display: isMobile ? 'inline-block' : 'block',
             }}
           >
             {titleDraft}
@@ -802,7 +807,7 @@ function TodoBlockContent({
           // リストモード: 通常時はテキスト表示、クリックで編集開始。
           <div
             onClick={(e) => {
-              if (isMobile) { e.stopPropagation(); onExpand?.(); }
+              if (isMobile) e.stopPropagation();
               pendingFocusRef.current = 'end';
               setIsListEditing(true);
             }}
@@ -812,9 +817,10 @@ function TodoBlockContent({
               color: draft ? 'var(--c-text-1)' : 'var(--c-text-3)',
               lineHeight: '1.55',
               padding: 0,
-              minHeight: '1.55em',
+              minHeight: isMobile ? undefined : '1.55em',
               wordBreak: 'break-word',
               whiteSpace: 'pre-wrap',
+              display: isMobile ? 'inline-block' : 'block',
             }}
           >
             {draft || 'クリックして編集'}

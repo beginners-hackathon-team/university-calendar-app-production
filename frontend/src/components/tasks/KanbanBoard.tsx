@@ -118,8 +118,13 @@ function SortableColumn({
     minWidth: 0,
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.6 : 1,
+    opacity: isDragging ? 0.12 : 1,
     zIndex: isDragging ? 5 : undefined,
+    ...(isDragging ? {
+      outline: '2px dashed var(--c-accent)',
+      outlineOffset: -3,
+      borderRadius: 'var(--r-card)',
+    } : {}),
   };
 
   const combinedRef = (node: HTMLElement | null) => {

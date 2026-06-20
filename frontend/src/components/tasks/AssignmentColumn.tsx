@@ -279,113 +279,176 @@ function AssignmentListItem({
       onMouseLeave={() => setHovered(false)}
       onClick={isMobile ? () => setExpanded(v => !v) : undefined}
       style={{
-        display: 'grid',
-        gridTemplateColumns: '22px minmax(0, 1fr)',
-        gap: 8,
         padding: '6px 10px',
         cursor: 'grab',
-        touchAction: 'none',
-        opacity: isDragging ? 0.5 : 1,
+        touchAction: isMobile ? 'pan-y' : 'none',
+        opacity: isDragging ? 0.08 : 1,
         transform,
         transition,
+        ...(isDragging ? {
+          outline: '2px dashed var(--c-accent)',
+          outlineOffset: -2,
+          borderRadius: 8,
+        } : {}),
         ...getTextRowStyle('assignment', { selected: isEditing, isDragging, variant: 'list' }),
       }}
     >
-      <div />
-      <div style={{ minWidth: 0 }}>
-        <div className="text-[12px]" style={{ marginBottom: 1 }}>
-          {lmsHref ? (
-            <a
-              href={lmsHref}
-              target="webclass"
-              rel="noopener noreferrer"
+      {/* Content grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr)', gap: 8 }}>
+        <div />
+        <div style={{ minWidth: 0 }}>
+          <div className="text-[12px]" style={{ marginBottom: 1 }}>
+            {lmsHref ? (
+              <a
+                href={lmsHref}
+                target="webclass"
+                rel="noopener noreferrer"
+                onPointerDown={e => e.stopPropagation()}
+                className="font-semibold"
+                style={{ color: 'var(--c-accent)', textDecoration: 'none' }}
+              >
+                {courseName || 'LMSで開く'}
+              </a>
+            ) : (
+              <span style={{ color: 'var(--c-text-3)' }}>{courseName || '授業未設定'}</span>
+            )}
+          </div>
+
+          {isEditing ? (
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              rows={1}
               onPointerDown={e => e.stopPropagation()}
-              className="font-semibold"
-              style={{ color: 'var(--c-accent)', textDecoration: 'none' }}
-            >
-              {courseName || 'LMSで開く'}
-            </a>
+              onChange={e => {
+                setDraft(e.target.value);
+                scheduleCommit(e.target.value);
+              }}
+              onBlur={() => {
+                setIsEditing(false);
+                setExpanded(false);
+                if (debounceRef.current) window.clearTimeout(debounceRef.current);
+                commitTitle(draft);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+              className="text-[13.5px] font-semibold"
+              style={{
+                display: 'block',
+                width: '100%',
+                resize: 'none',
+                border: '1.5px solid var(--c-accent)',
+                borderRadius: 4,
+                outline: 'none',
+                background: 'transparent',
+                lineHeight: '1.55',
+                padding: '2px 5px',
+                fontFamily: 'inherit',
+                overflow: 'hidden',
+                color: 'var(--c-text-1)',
+              }}
+            />
           ) : (
-            <span style={{ color: 'var(--c-text-3)' }}>{courseName || '授業未設定'}</span>
+            <div
+              onClick={(e) => {
+                if (isMobile) e.stopPropagation();
+                pendingFocusRef.current = true;
+                setIsEditing(true);
+              }}
+              className="text-[13.5px] font-semibold"
+              style={{
+                cursor: 'text',
+                color: 'var(--c-text-1)',
+                lineHeight: '1.55',
+                minHeight: isMobile ? undefined : '1.55em',
+                wordBreak: 'break-word',
+                display: isMobile ? 'inline-block' : 'block',
+              }}
+            >
+              {draft}
+            </div>
+          )}
+
+          <div className="text-[12px] font-bold" style={{ color: deadline.color, marginTop: 1 }}>
+            {deadline.label}
+          </div>
+
+          {/* Desktop-only inline buttons */}
+          {!isMobile && (
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'flex',
+                gap: 4,
+                marginTop: 4,
+                opacity: showButtons ? 1 : 0,
+                pointerEvents: showButtons ? 'auto' : 'none',
+                transition: 'opacity 0.12s',
+              }}
+            >
+              <ActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToTodo}>Todo→</ActionButton>
+              <ActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToDone}>完了→</ActionButton>
+            </div>
           )}
         </div>
+      </div>
 
-        {isEditing ? (
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            rows={1}
+      {/* Mobile action menu — expands below card content */}
+      {isMobile && showButtons && (
+        <div
+          onClick={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
+          style={{
+            marginTop: 6,
+            marginLeft: -10,
+            marginRight: -10,
+            marginBottom: -6,
+            borderTop: '1px solid var(--c-border)',
+          }}
+        >
+          <button
+            type="button"
             onPointerDown={e => e.stopPropagation()}
-            onChange={e => {
-              setDraft(e.target.value);
-              scheduleCommit(e.target.value);
-            }}
-            onBlur={() => {
-              setIsEditing(false);
-              if (debounceRef.current) window.clearTimeout(debounceRef.current);
-              commitTitle(draft);
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            className="text-[13.5px] font-semibold"
+            onClick={() => { onMoveToTodo(); setExpanded(false); }}
+            className="text-[14px] font-medium"
             style={{
               display: 'block',
               width: '100%',
-              resize: 'none',
-              border: '1.5px solid var(--c-accent)',
-              borderRadius: 4,
-              outline: 'none',
+              padding: '12px 14px',
+              textAlign: 'left',
               background: 'transparent',
-              lineHeight: '1.55',
-              padding: '2px 5px',
-              fontFamily: 'inherit',
-              overflow: 'hidden',
+              border: 'none',
               color: 'var(--c-text-1)',
-            }}
-          />
-        ) : (
-          <div
-            onClick={(e) => {
-              if (isMobile) { e.stopPropagation(); setExpanded(true); }
-              pendingFocusRef.current = true;
-              setIsEditing(true);
-            }}
-            className="text-[13.5px] font-semibold"
-            style={{
-              cursor: 'text',
-              color: 'var(--c-text-1)',
-              lineHeight: '1.55',
-              minHeight: '1.55em',
-              wordBreak: 'break-word',
+              cursor: 'pointer',
             }}
           >
-            {draft}
-          </div>
-        )}
-
-        <div className="text-[12px] font-bold" style={{ color: deadline.color, marginTop: 1 }}>
-          {deadline.label}
+            TODOへ
+          </button>
+          <button
+            type="button"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={() => { onMoveToDone(); setExpanded(false); }}
+            className="text-[14px] font-medium"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '12px 14px',
+              textAlign: 'left',
+              background: 'transparent',
+              border: 'none',
+              borderTop: '1px solid var(--c-border)',
+              color: 'var(--c-text-1)',
+              cursor: 'pointer',
+            }}
+          >
+            完了へ
+          </button>
         </div>
-
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            display: 'flex',
-            gap: 4,
-            marginTop: 4,
-            opacity: showButtons ? 1 : 0,
-            pointerEvents: showButtons ? 'auto' : 'none',
-            transition: 'opacity 0.12s',
-          }}
-        >
-          <ActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToTodo}>Todo→</ActionButton>
-          <ActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToDone}>完了→</ActionButton>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

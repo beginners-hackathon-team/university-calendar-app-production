@@ -740,7 +740,22 @@ export default function TasksPage() {
   } as React.CSSProperties;
 
   return (
-    <div className="min-h-screen" style={{ ...palette, background: 'var(--c-bg)' }}>
+    <div
+      className="min-h-screen"
+      style={{ ...palette, background: 'var(--c-bg)' }}
+      onTouchStart={isMobile ? (e) => { const t = e.touches[0]; if (t) touchStartX.current = t.clientX; } : undefined}
+      onTouchEnd={isMobile ? (e) => {
+        const touch = e.changedTouches[0];
+        if (touchStartX.current === null || !touch) return;
+        const delta = touch.clientX - touchStartX.current;
+        touchStartX.current = null;
+        if (Math.abs(delta) < 60) return;
+        const tabs: ColumnKey[] = ['assignment', 'todo', 'done'];
+        const idx = tabs.indexOf(mobileTab);
+        const next = delta < 0 ? tabs[idx + 1] : tabs[idx - 1];
+        if (next) setMobileTab(next);
+      } : undefined}
+    >
       <div className="mx-auto px-3 py-4 sm:px-5 sm:py-8" style={{ maxWidth: 1400 }}>
         <div className="mb-5">
           <div className="flex flex-wrap items-center justify-end gap-4 mb-4">
@@ -843,20 +858,6 @@ export default function TasksPage() {
               setDropTargetColumn(null);
             }}
           >
-            <div
-              onTouchStart={isMobile ? (e) => { const t = e.touches[0]; if (t) touchStartX.current = t.clientX; } : undefined}
-              onTouchEnd={isMobile ? (e) => {
-                const touch = e.changedTouches[0];
-                if (touchStartX.current === null || !touch) return;
-                const delta = touch.clientX - touchStartX.current;
-                touchStartX.current = null;
-                if (Math.abs(delta) < 60) return;
-                const tabs: ColumnKey[] = ['assignment', 'todo', 'done'];
-                const idx = tabs.indexOf(mobileTab);
-                const next = delta < 0 ? tabs[idx + 1] : tabs[idx - 1];
-                if (next) setMobileTab(next);
-              } : undefined}
-            >
             <KanbanBoard
               isMobile={isMobile}
               visibleOrder={mobileVisibleOrder}
@@ -887,26 +888,30 @@ export default function TasksPage() {
               onMoveDoneAssignmentToTodo={handleMoveDoneAssignmentToTodo}
               onMoveDoneTodoToTodo={handleMoveDoneTodoToTodo}
             />
-            </div>
 
-            <DragOverlay dropAnimation={null} modifiers={[snapToPointerModifier]}>
+            <DragOverlay
+              dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+              modifiers={[snapToPointerModifier]}
+            >
               {overlayLabel && (
-                <div
-                  className="text-[13px] font-semibold"
-                  style={{
-                    padding: '8px 12px',
-                    background: '#fff',
-                    border: '1px solid var(--c-accent)',
-                    borderRadius: 10,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
-                    maxWidth: 280,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    color: 'var(--c-text-1)',
-                  }}
-                >
-                  {overlayLabel}
+                <div style={{ transform: 'scale(1.05) rotate(-0.5deg)', transition: 'none' }}>
+                  <div
+                    className="text-[13px] font-semibold"
+                    style={{
+                      padding: '9px 14px',
+                      background: '#fff',
+                      border: '1.5px solid var(--c-accent)',
+                      borderRadius: 10,
+                      boxShadow: '0 16px 40px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.10)',
+                      maxWidth: 280,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: 'var(--c-text-1)',
+                    }}
+                  >
+                    {overlayLabel}
+                  </div>
                 </div>
               )}
             </DragOverlay>

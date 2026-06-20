@@ -84,44 +84,46 @@ export default function CoursesPage() {
     <div className="min-h-screen" style={{ background: 'var(--c-bg)' }}>
       <div className="mx-auto px-3 py-4 sm:px-5 sm:py-8" style={{ maxWidth: 1240 }}>
 
-        {/* Compact header: year + quarter selector + register link */}
-        <div className="flex items-center gap-2 flex-wrap mb-4">
-          <span className="text-[13px] font-medium" style={{ color: 'var(--c-text-3)' }}>
+        {/* Compact header: year + quarter selector (centered) + register link (right) */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[13px] font-medium shrink-0" style={{ color: 'var(--c-text-3)' }}>
             {selectedYear}年度
           </span>
 
-          {/* Quarter selector */}
-          <div
-            className="flex gap-1 p-1"
-            style={{ background: '#ECEEF2', borderRadius: 12 }}
-          >
-            {([1, 2, 3, 4] as const).map(q => (
-              <button
-                key={q}
-                onClick={() => setSelectedQuarter(q)}
-                className="font-semibold text-[13px] transition-all duration-150"
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 9,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: selectedQuarter === q ? '#fff' : 'transparent',
-                  color: selectedQuarter === q ? 'var(--c-accent)' : 'var(--c-text-3)',
-                  boxShadow: selectedQuarter === q ? '0 1px 4px rgba(0,0,0,0.09)' : 'none',
-                }}
-              >
-                Q{q}
-              </button>
-            ))}
+          {/* Quarter selector — centered in remaining space */}
+          <div className="flex flex-1 justify-center">
+            <div
+              className="flex gap-1 p-1"
+              style={{ background: '#ECEEF2', borderRadius: 12 }}
+            >
+              {([1, 2, 3, 4] as const).map(q => (
+                <button
+                  key={q}
+                  onClick={() => setSelectedQuarter(q)}
+                  className="font-semibold text-[13px] transition-all duration-150"
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 9,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: selectedQuarter === q ? '#fff' : 'transparent',
+                    color: selectedQuarter === q ? 'var(--c-accent)' : 'var(--c-text-3)',
+                    boxShadow: selectedQuarter === q ? '0 1px 4px rgba(0,0,0,0.09)' : 'none',
+                  }}
+                >
+                  Q{q}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Portal registration link — compact */}
+          {/* Portal registration link — narrow, right-aligned */}
           <a
             href={buildPortalRegistListUrl(QUARTER_PORTAL[selectedQuarter] ?? 'Q1')}
             target="_blank"
             rel="noopener noreferrer"
-            className="ku-portal-btn"
-            style={{ padding: '5px 10px', fontSize: 12 }}
+            className="ku-portal-btn shrink-0"
+            style={{ padding: '5px 8px', fontSize: 11, gap: 3 }}
           >
             時間割登録
             <ArrowUpRight />
