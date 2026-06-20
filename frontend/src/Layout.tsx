@@ -491,6 +491,14 @@ export default function Layout() {
         )}
       </header>
 
+      {/* Backdrop: ドロワー外をタップで閉じる */}
+      {mobileNavOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
       {/* ── Page Content ───────────────────────────────────── */}
       <main>
         <Outlet />

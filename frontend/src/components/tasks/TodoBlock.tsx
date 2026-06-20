@@ -477,7 +477,7 @@ function AssignmentBlockContent({
         ) : (
           <div
             onClick={(e) => {
-              if (isMobile) { e.stopPropagation(); return; }
+              if (isMobile) return; // バブルアップさせてカードのexpandを発火
               pendingFocusRef.current = 'end';
               setIsListTitleEditing(true);
             }}

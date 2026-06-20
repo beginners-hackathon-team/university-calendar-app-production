@@ -355,7 +355,7 @@ function AssignmentListItem({
           ) : (
             <div
               onClick={(e) => {
-                if (isMobile) { e.stopPropagation(); return; }
+                if (isMobile) return; // バブルアップさせてカードのexpandを発火
                 pendingFocusRef.current = true;
                 setIsEditing(true);
               }}
@@ -505,7 +505,8 @@ export function MobileMenuItem({
       style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
+        gap: 6,
         width: '100%',
         padding: '12px 16px',
         background: 'transparent',
@@ -513,15 +514,12 @@ export function MobileMenuItem({
         borderTop: '1px solid var(--c-border)',
         color: danger ? 'var(--c-danger)' : 'var(--c-text-1)',
         cursor: 'pointer',
-        textAlign: 'left',
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {leading && (
-          <span style={{ fontSize: 13, opacity: 0.55, fontWeight: 400 }}>{leading}</span>
-        )}
-        {children}
-      </span>
+      {leading && (
+        <span style={{ fontSize: 13, opacity: 0.55, fontWeight: 400 }}>{leading}</span>
+      )}
+      {children}
       {trailing && (
         <span style={{ fontSize: 13, opacity: 0.45, fontWeight: 400 }}>{trailing}</span>
       )}

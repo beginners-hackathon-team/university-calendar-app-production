@@ -236,7 +236,7 @@ function DoneCard({
           ) : (
             <div
               onClick={(e) => {
-                if (!onChangeTitle || isMobile) { if (isMobile) e.stopPropagation(); return; }
+                if (!onChangeTitle || isMobile) return; // モバイルはバブルアップさせてexpandを発火
                 pendingFocusRef.current = true;
                 setIsEditing(true);
               }}
