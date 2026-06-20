@@ -14,15 +14,19 @@ import {
   type Modifier,
 } from '@dnd-kit/core';
 
-// ドラッグ中のオーバーレイチップをカーソル位置に合わせるモディファイア。
-// dnd-kit デフォルトはドラッグ元の左上に配置するため、掴んだ位置にオフセットを加える。
+// ドラッグ中のオーバーレイを「横：中央・縦：やや下寄り」で掴んでいるように見せるモディファイア。
+// grabX/Y はオーバーレイ内でカーソルが来てほしい位置（左端・上端からの距離）。
 const snapToPointerModifier: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
   if (!activatorEvent || !draggingNodeRect) return transform;
   const event = activatorEvent as PointerEvent;
   if (typeof event.clientX !== 'number') return transform;
-  const offsetX = event.clientX - draggingNodeRect.left;
-  const offsetY = event.clientY - draggingNodeRect.top;
-  return { ...transform, x: transform.x + offsetX, y: transform.y + offsetY };
+  const grabX = draggingNodeRect.width / 2;
+  const grabY = draggingNodeRect.height * 0.6;
+  return {
+    ...transform,
+    x: transform.x + event.clientX - draggingNodeRect.left - grabX,
+    y: transform.y + event.clientY - draggingNodeRect.top - grabY,
+  };
 };
 import { arrayMove } from '@dnd-kit/sortable';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
