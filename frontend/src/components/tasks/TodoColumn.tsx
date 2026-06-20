@@ -10,6 +10,7 @@ type Props = {
   viewMode: TodoViewMode;
   systemTypes: Record<string, string | null>;
   busyKeys: Set<string>;
+  isMobile?: boolean;
   setNodeRef: (node: HTMLElement | null) => void;
   style?: React.CSSProperties;
   gripRef: (node: HTMLElement | null) => void;
@@ -35,6 +36,7 @@ export default function TodoColumn({
   viewMode,
   systemTypes,
   busyKeys,
+  isMobile,
   setNodeRef,
   style,
   gripRef,
@@ -168,6 +170,7 @@ export default function TodoColumn({
                     lineNumber={viewMode === 'text' ? index + 1 : undefined}
                     isLast={isLast}
                     systemTypes={systemTypes}
+                    isMobile={isMobile}
                     busy={busyKeys.has(`todo-delete-${id}`)}
                     autoFocus={focusTarget?.id === id}
                     caret={focusTarget?.id === id ? focusTarget.caret : 'end'}

@@ -8,6 +8,7 @@ type Props = {
   items: DoneItem[];
   systemTypes: Record<string, string | null>;
   busyKeys: Set<string>;
+  isMobile?: boolean;
   setNodeRef: (node: HTMLElement | null) => void;
   style?: React.CSSProperties;
   gripRef: (node: HTMLElement | null) => void;
@@ -25,6 +26,7 @@ export default function DoneColumn({
   items,
   systemTypes,
   busyKeys,
+  isMobile,
   setNodeRef,
   style,
   gripRef,
@@ -58,6 +60,7 @@ export default function DoneColumn({
                   key={`${item.kind}:${item.data.id}`}
                   item={item}
                   systemTypes={systemTypes}
+                  isMobile={isMobile}
                   busy={
                     item.kind === 'todo'
                       ? busyKeys.has(`todo-toggle-${item.data.id}`) || busyKeys.has(`todo-delete-${item.data.id}`)
@@ -80,6 +83,7 @@ export default function DoneColumn({
 function DoneCard({
   item,
   systemTypes,
+  isMobile,
   busy,
   onDelete,
   onMoveToAssignment,
@@ -88,6 +92,7 @@ function DoneCard({
 }: {
   item: DoneItem;
   systemTypes: Record<string, string | null>;
+  isMobile?: boolean;
   busy: boolean;
   onDelete: () => void;
   onMoveToAssignment?: () => void;
@@ -138,7 +143,7 @@ function DoneCard({
     debounceRef.current = window.setTimeout(() => commitTitle(value), 300);
   };
 
-  const showButtons = hovered && !isEditing;
+  const showButtons = (hovered || Boolean(isMobile)) && !isEditing;
 
   const lmsHref = item.kind === 'assignment' ? buildAssignmentHref(item.data, systemTypes) : undefined;
   const courseName = item.kind === 'assignment' ? formatCourseName(item.data.course_name) : undefined;

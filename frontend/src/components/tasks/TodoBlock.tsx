@@ -22,6 +22,7 @@ type Props = {
   lineNumber?: number;
   isLast?: boolean;
   systemTypes: Record<string, string | null>;
+  isMobile?: boolean;
   busy: boolean;
   autoFocus?: boolean;
   caret?: CaretPos;
@@ -112,6 +113,7 @@ export default function TodoBlock({
   lineNumber,
   isLast = false,
   systemTypes,
+  isMobile,
   busy,
   autoFocus = false,
   caret = 'end',
@@ -194,6 +196,7 @@ export default function TodoBlock({
             assignment={item.assignment}
             systemTypes={systemTypes}
             variant={variant}
+            isMobile={isMobile}
             autoFocus={autoFocus}
             caret={caret}
             focusField={focusField}
@@ -212,6 +215,7 @@ export default function TodoBlock({
             busy={busy}
             isLast={isLast}
             variant={variant}
+            isMobile={isMobile}
             autoFocus={autoFocus}
             caret={caret}
             hovered={hovered}
@@ -239,6 +243,7 @@ function AssignmentBlockContent({
   assignment,
   systemTypes,
   variant,
+  isMobile,
   autoFocus = false,
   caret = 'end',
   focusField,
@@ -254,6 +259,7 @@ function AssignmentBlockContent({
   assignment: Assignment;
   systemTypes: Record<string, string | null>;
   variant: TodoBlockVariant;
+  isMobile?: boolean;
   autoFocus?: boolean;
   caret?: CaretPos;
   focusField?: AssignmentFocusField;
@@ -420,8 +426,8 @@ function AssignmentBlockContent({
               display: 'flex',
               gap: 4,
               marginTop: 4,
-              opacity: hovered && !isListTitleEditing ? 1 : 0,
-              pointerEvents: hovered && !isListTitleEditing ? 'auto' : 'none',
+              opacity: (hovered || Boolean(isMobile)) && !isListTitleEditing ? 1 : 0,
+              pointerEvents: (hovered || Boolean(isMobile)) && !isListTitleEditing ? 'auto' : 'none',
               transition: 'opacity 0.12s',
             }}
           >
@@ -581,6 +587,7 @@ function TodoBlockContent({
   busy,
   isLast,
   variant,
+  isMobile,
   autoFocus,
   caret,
   hovered,
@@ -598,6 +605,7 @@ function TodoBlockContent({
   busy: boolean;
   isLast: boolean;
   variant: TodoBlockVariant;
+  isMobile?: boolean;
   autoFocus: boolean;
   caret: CaretPos;
   hovered: boolean;
@@ -732,8 +740,8 @@ function TodoBlockContent({
     }
   };
 
-  const showDelete = hovered || focused;
-  const showMoveButtons = (hovered || focused) && !isListEditing && variant === 'list';
+  const showDelete = hovered || focused || Boolean(isMobile);
+  const showMoveButtons = (hovered || focused || Boolean(isMobile)) && !isListEditing && variant === 'list';
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 6 }}>

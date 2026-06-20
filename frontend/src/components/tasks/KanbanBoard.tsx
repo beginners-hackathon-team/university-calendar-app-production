@@ -9,6 +9,7 @@ import TodoColumn from './TodoColumn';
 import DoneColumn from './DoneColumn';
 
 type Props = {
+  isMobile?: boolean;
   visibleOrder: ColumnKey[];
   dropTargetColumn: ColumnKey | null;
   columnShares: Record<ColumnKey, number>;
@@ -208,6 +209,7 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         assignments={props.pendingAssignments}
         sortMode={props.assignmentSortMode}
         systemTypes={props.systemTypes}
+        isMobile={props.isMobile}
         setNodeRef={slot.setNodeRef}
         style={slot.style}
         gripRef={slot.gripRef}
@@ -227,6 +229,7 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         viewMode={props.todoViewMode}
         systemTypes={props.systemTypes}
         busyKeys={props.busyKeys}
+        isMobile={props.isMobile}
         setNodeRef={slot.setNodeRef}
         style={slot.style}
         gripRef={slot.gripRef}
@@ -250,6 +253,7 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
       items={props.doneItems}
       systemTypes={props.systemTypes}
       busyKeys={props.busyKeys}
+      isMobile={props.isMobile}
       setNodeRef={slot.setNodeRef}
       style={slot.style}
       gripRef={slot.gripRef}

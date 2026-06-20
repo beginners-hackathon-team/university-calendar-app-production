@@ -77,7 +77,7 @@ export default function CoursesPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--c-bg)' }}>
-      <div className="mx-auto px-5 py-10" style={{ maxWidth: 1240 }}>
+      <div className="mx-auto px-3 py-5 sm:px-5 sm:py-10" style={{ maxWidth: 1240 }}>
 
         {/* Page header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
@@ -145,10 +145,10 @@ export default function CoursesPage() {
           }}
         >
           <div className="overflow-x-auto">
-            <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', minWidth: 560 }}>
               <colgroup>
-                <col style={{ width: 74 }} />
-                {days.map(d => <col key={d} />)}
+                <col style={{ width: 60 }} />
+                {days.map(d => <col key={d} style={{ minWidth: 84 }} />)}
               </colgroup>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--c-border)' }}>
@@ -189,15 +189,15 @@ export default function CoursesPage() {
                     <td
                       className="text-center align-top"
                       style={{
-                        padding: '12px 6px',
+                        padding: '10px 4px',
                         borderRight: '1px solid var(--c-border)',
                         background: '#FAFBFC',
                       }}
                     >
-                      <div className="text-[14px] font-bold" style={{ color: 'var(--c-text-2)' }}>
+                      <div className="text-[13px] font-bold" style={{ color: 'var(--c-text-2)' }}>
                         {pData.period}
                       </div>
-                      <div className="text-[10px] mt-1 leading-relaxed" style={{ color: 'var(--c-text-3)' }}>
+                      <div className="text-[9px] mt-1 leading-relaxed" style={{ color: 'var(--c-text-3)' }}>
                         {pData.start}
                         <br />–<br />
                         {pData.end}
@@ -213,7 +213,7 @@ export default function CoursesPage() {
                           key={dayName}
                           className="align-top"
                           style={{
-                            padding: 8,
+                            padding: 5,
                             borderRight: '1px solid var(--c-border)',
                             minHeight: 90,
                             verticalAlign: 'top',
@@ -257,34 +257,63 @@ function CourseCell({ course, compact = false }: { course: Course; compact?: boo
     : null;
 
   const cardStyle: React.CSSProperties = {
-    background: 'var(--c-accent-bg)',
-    border: '1px solid #D4E3FD',
-    borderRadius: compact ? 12 : 10,
-    padding: compact ? '12px 16px' : '9px 10px',
-    minHeight: compact ? undefined : 74,
+    background: '#EBF5EB',
+    border: '1px solid #B2DEB2',
+    borderRadius: compact ? 12 : 6,
+    padding: compact ? '12px 16px' : '6px 7px',
+    minHeight: compact ? undefined : 82,
     minWidth: compact ? 160 : undefined,
     maxWidth: compact ? 220 : undefined,
     display: 'flex',
     flexDirection: 'column',
-    gap: 6,
+    gap: 4,
     height: compact ? undefined : '100%',
     textDecoration: 'none',
     cursor: lmsUrl ? 'pointer' : 'default',
     transition: lmsUrl ? 'border-color 0.12s, background 0.12s' : undefined,
+    // 横書き強制 — Safari/iPhone でも縦書きにならないように明示する
+    writingMode: 'horizontal-tb',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
   };
 
   const content = (
     <>
-      <div className="text-[12px] font-bold leading-tight" style={{ color: '#1E40AF', wordBreak: 'break-all' }}>
+      <div
+        className="text-[11.5px] font-bold leading-snug"
+        style={{
+          color: '#1565C0',
+          writingMode: 'horizontal-tb',
+          overflowWrap: 'anywhere',
+          wordBreak: 'break-word',
+          whiteSpace: 'normal',
+        }}
+      >
         {course.name}
       </div>
       {course.teacher && (
-        <div className="text-[10.5px] leading-tight" style={{ color: 'var(--c-text-3)' }}>
+        <div
+          className="text-[10px] leading-snug"
+          style={{
+            color: 'var(--c-text-3)',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+          }}
+        >
           {course.teacher}
         </div>
       )}
       {course.room && (
-        <div className="text-[10.5px] leading-tight" style={{ color: 'var(--c-text-2)' }}>
+        <div
+          className="text-[10px] leading-snug"
+          style={{
+            color: 'var(--c-text-2)',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+          }}
+        >
           {course.room}
         </div>
       )}
@@ -299,12 +328,12 @@ function CourseCell({ course, compact = false }: { course: Course; compact?: boo
         rel="noopener noreferrer"
         style={cardStyle}
         onMouseEnter={e => {
-          (e.currentTarget as HTMLElement).style.borderColor = '#93C5FD';
-          (e.currentTarget as HTMLElement).style.background = '#E0ECFF';
+          (e.currentTarget as HTMLElement).style.borderColor = '#81C784';
+          (e.currentTarget as HTMLElement).style.background = '#D4EDDA';
         }}
         onMouseLeave={e => {
-          (e.currentTarget as HTMLElement).style.borderColor = '#D4E3FD';
-          (e.currentTarget as HTMLElement).style.background = 'var(--c-accent-bg)';
+          (e.currentTarget as HTMLElement).style.borderColor = '#B2DEB2';
+          (e.currentTarget as HTMLElement).style.background = '#EBF5EB';
         }}
       >
         {content}

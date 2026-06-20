@@ -18,6 +18,7 @@ type Props = {
   assignments: Assignment[];
   sortMode: AssignmentSortMode;
   systemTypes: Record<string, string | null>;
+  isMobile?: boolean;
   setNodeRef: (node: HTMLElement | null) => void;
   style?: React.CSSProperties;
   gripRef: (node: HTMLElement | null) => void;
@@ -33,6 +34,7 @@ export default function AssignmentColumn({
   assignments,
   sortMode,
   systemTypes,
+  isMobile,
   setNodeRef,
   style,
   gripRef,
@@ -92,6 +94,7 @@ export default function AssignmentColumn({
                   key={a.id}
                   assignment={a}
                   systemTypes={systemTypes}
+                  isMobile={isMobile}
                   onChangeTitle={onChangeTitle}
                   onMoveToTodo={onMoveToTodo}
                   onMoveToDone={onMoveToDone}
@@ -109,6 +112,7 @@ export default function AssignmentColumn({
                 key={a.id}
                 assignment={a}
                 systemTypes={systemTypes}
+                isMobile={isMobile}
                 onChangeTitle={onChangeTitle}
                 onMoveToTodo={onMoveToTodo}
                 onMoveToDone={onMoveToDone}
@@ -124,12 +128,14 @@ export default function AssignmentColumn({
 function SortableAssignmentCard({
   assignment,
   systemTypes,
+  isMobile,
   onChangeTitle,
   onMoveToTodo,
   onMoveToDone,
 }: {
   assignment: Assignment;
   systemTypes: Record<string, string | null>;
+  isMobile?: boolean;
   onChangeTitle: (id: string, taskName: string) => void;
   onMoveToTodo: (id: string) => void;
   onMoveToDone: (id: string) => void;
@@ -143,6 +149,7 @@ function SortableAssignmentCard({
     <AssignmentListItem
       assignment={assignment}
       systemTypes={systemTypes}
+      isMobile={isMobile}
       setNodeRef={setNodeRef}
       attributes={attributes}
       listeners={listeners}
@@ -159,12 +166,14 @@ function SortableAssignmentCard({
 function DraggableAssignmentCard({
   assignment,
   systemTypes,
+  isMobile,
   onChangeTitle,
   onMoveToTodo,
   onMoveToDone,
 }: {
   assignment: Assignment;
   systemTypes: Record<string, string | null>;
+  isMobile?: boolean;
   onChangeTitle: (id: string, taskName: string) => void;
   onMoveToTodo: (id: string) => void;
   onMoveToDone: (id: string) => void;
@@ -178,6 +187,7 @@ function DraggableAssignmentCard({
     <AssignmentListItem
       assignment={assignment}
       systemTypes={systemTypes}
+      isMobile={isMobile}
       setNodeRef={setNodeRef}
       attributes={attributes}
       listeners={listeners}
@@ -192,6 +202,7 @@ function DraggableAssignmentCard({
 function AssignmentListItem({
   assignment,
   systemTypes,
+  isMobile,
   setNodeRef,
   attributes,
   listeners,
@@ -204,6 +215,7 @@ function AssignmentListItem({
 }: {
   assignment: Assignment;
   systemTypes: Record<string, string | null>;
+  isMobile?: boolean;
   setNodeRef: (node: HTMLElement | null) => void;
   attributes: DraggableAttributes;
   listeners: DraggableSyntheticListeners;
@@ -255,7 +267,7 @@ function AssignmentListItem({
   const deadline = formatRemainingDeadline(assignment.availability_end);
   const courseName = formatCourseName(assignment.course_name);
 
-  const showButtons = hovered && !isEditing;
+  const showButtons = (hovered || Boolean(isMobile)) && !isEditing;
 
   return (
     <div

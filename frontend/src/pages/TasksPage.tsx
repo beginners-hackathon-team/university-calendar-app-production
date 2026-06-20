@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsMobile } from '../hooks/useIsMobile';
 import {
   DndContext,
   DragOverlay,
@@ -115,6 +116,9 @@ export default function TasksPage() {
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [dropTargetColumn, setDropTargetColumn] = useState<ColumnKey | null>(null);
 
+  const isMobile = useIsMobile();
+  const [mobileTab, setMobileTab] = useState<ColumnKey>('assignment');
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -198,6 +202,7 @@ export default function TasksPage() {
   doneColumnItemsRef.current = doneItems;
 
   const visibleOrder = useMemo(() => order.filter(key => visible[key]), [order, visible]);
+  const mobileVisibleOrder = useMemo<ColumnKey[]>(() => isMobile ? [mobileTab] : visibleOrder, [isMobile, mobileTab, visibleOrder]);
 
   const resolvedShares = useMemo<Record<ColumnKey, number>>(() => ({
     assignment: columnShares.assignment ?? DEFAULT_COLUMN_SHARE,
@@ -731,35 +736,77 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen" style={{ ...palette, background: 'var(--c-bg)' }}>
-      <div className="mx-auto px-5 py-8" style={{ maxWidth: 1400 }}>
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
-          <h1 className="font-bold text-[23px]" style={{ color: 'var(--c-text-1)', letterSpacing: '-0.025em' }}>
-            タスク
-          </h1>
+      <div className="mx-auto px-3 py-4 sm:px-5 sm:py-8" style={{ maxWidth: 1400 }}>
+        <div className="mb-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <h1 className="font-bold text-[23px]" style={{ color: 'var(--c-text-1)', letterSpacing: '-0.025em' }}>
+              タスク
+            </h1>
 
-          <div className="flex gap-1 p-1" style={{ background: '#F3F4F6', borderRadius: 10 }}>
-            {TOGGLE_ORDER.map(key => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleColumn(key)}
-                aria-pressed={visible[key]}
-                className="text-[13px] font-semibold"
-                style={{
-                  padding: '6px 15px',
-                  borderRadius: 8,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: visible[key] ? '#fff' : 'transparent',
-                  color: visible[key] ? 'var(--c-text-1)' : 'var(--c-text-3)',
-                  boxShadow: visible[key] ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                  transition: 'background 0.15s, color 0.15s, box-shadow 0.15s',
-                }}
-              >
-                {columnLabels[key]}
-              </button>
-            ))}
+            {!isMobile && (
+              <div className="flex gap-1 p-1" style={{ background: '#F3F4F6', borderRadius: 10 }}>
+                {TOGGLE_ORDER.map(key => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleColumn(key)}
+                    aria-pressed={visible[key]}
+                    className="text-[13px] font-semibold"
+                    style={{
+                      padding: '6px 15px',
+                      borderRadius: 8,
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: visible[key] ? '#fff' : 'transparent',
+                      color: visible[key] ? 'var(--c-text-1)' : 'var(--c-text-3)',
+                      boxShadow: visible[key] ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                      transition: 'background 0.15s, color 0.15s, box-shadow 0.15s',
+                    }}
+                  >
+                    {columnLabels[key]}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {isMobile && (
+            <div className="flex" style={{ background: '#F3F4F6', borderRadius: 10, padding: 4 }}>
+              {TOGGLE_ORDER.map(key => {
+                const count = key === 'assignment'
+                  ? assignmentColumnItems.length
+                  : key === 'todo'
+                  ? todoColumnItems.length
+                  : doneItems.length;
+                const active = mobileTab === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setMobileTab(key)}
+                    aria-pressed={active}
+                    className="text-[13px] font-semibold"
+                    style={{
+                      flex: 1,
+                      padding: '10px 4px',
+                      borderRadius: 8,
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: active ? '#fff' : 'transparent',
+                      color: active ? 'var(--c-text-1)' : 'var(--c-text-3)',
+                      boxShadow: active ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                      transition: 'background 0.15s, color 0.15s, box-shadow 0.15s',
+                    }}
+                  >
+                    {columnLabels[key]}
+                    {count > 0 && (
+                      <span className="ml-1 text-[11px]" style={{ opacity: 0.65 }}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -796,7 +843,8 @@ export default function TasksPage() {
             }}
           >
             <KanbanBoard
-              visibleOrder={visibleOrder}
+              isMobile={isMobile}
+              visibleOrder={mobileVisibleOrder}
               dropTargetColumn={dropTargetColumn}
               columnShares={resolvedShares}
               pendingAssignments={assignmentColumnItems}
