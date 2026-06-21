@@ -606,6 +606,14 @@ export default function TasksPage() {
     const activeColumn = event.active.data.current?.column as ColumnKey | undefined;
     const overData = event.over?.data.current as Record<string, unknown> | undefined;
     const targetColumn = resolveOverColumn(overData);
+
+    // TODOは課題カラムにドロップできないので、ハイライトも点線プレビューも出さない
+    if (activeType === 'todo' && targetColumn === 'assignment') {
+      setDropTargetColumn(null);
+      setCrossColumnGhost(null);
+      return;
+    }
+
     setDropTargetColumn(targetColumn);
 
     if (activeColumn && targetColumn && activeColumn !== targetColumn) {
