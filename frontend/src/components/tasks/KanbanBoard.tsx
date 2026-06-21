@@ -12,6 +12,8 @@ type Props = {
   isMobile?: boolean;
   visibleOrder: ColumnKey[];
   dropTargetColumn: ColumnKey | null;
+  crossColumnGhost: { column: ColumnKey; beforeKey: string | null } | null;
+  activeDragLabel: string | null;
   columnShares: Record<ColumnKey, number>;
   pendingAssignments: Assignment[];
   todoColumnItems: TodoColumnItem[];
@@ -208,6 +210,9 @@ function ColumnResizer({
 
 function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode {
   const highlighted = props.dropTargetColumn === key;
+  const ghostBeforeKey = props.crossColumnGhost?.column === key
+    ? props.crossColumnGhost.beforeKey
+    : undefined;
   if (key === 'assignment') {
     return (
       <AssignmentColumn
@@ -220,6 +225,8 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         gripRef={slot.gripRef}
         gripProps={slot.gripProps}
         highlighted={highlighted}
+        ghostBeforeKey={ghostBeforeKey}
+        activeDragLabel={props.activeDragLabel}
         onSortModeChange={props.onAssignmentSortModeChange}
         onChangeTitle={props.onChangeAssignmentTitle}
         onMoveToTodo={props.onMoveAssignmentToTodo}
@@ -240,6 +247,8 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         gripRef={slot.gripRef}
         gripProps={slot.gripProps}
         highlighted={highlighted}
+        ghostBeforeKey={ghostBeforeKey}
+        activeDragLabel={props.activeDragLabel}
         onViewModeChange={props.onTodoViewModeChange}
         onChangeTitle={props.onChangeTodoTitle}
         onChangeAssignmentTitle={props.onChangeAssignmentTitle}
@@ -264,6 +273,8 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
       gripRef={slot.gripRef}
       gripProps={slot.gripProps}
       highlighted={highlighted}
+      ghostBeforeKey={ghostBeforeKey}
+      activeDragLabel={props.activeDragLabel}
       onDeleteTodo={props.onDeleteTodo}
       onDeleteAssignment={props.onDeleteAssignment}
       onMoveAssignmentToAssignment={props.onMoveDoneAssignmentToAssignment}

@@ -261,6 +261,7 @@ async function buildCourseItems(
 
 const ALL_Q_IMPORT_KEY = 'allQImport'
 const PENDING_ACTION_KEY = 'ku-extension-pending-action'
+const PENDING_NAV_STAGE_KEY = 'ku-extension-nav-stage'
 const QUARTER_SWITCH_KEY = 'ku-extension-quarter-switch'
 const ALL_PORTAL_QUARTERS = ['11', '12', '21', '22']
 
@@ -776,6 +777,60 @@ async function initLmsSidePanel(): Promise<void> {
   }
 }
 
+/* ── ポータル __doPostBack ヘルパー ─────────────────────── */
+
+function parsePostBack(rawHref: string): { target: string; argument: string } | null {
+  const m = rawHref.match(/javascript:.*__doPostBack\(\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/)
+  if (!m) return null
+  return { target: m[1], argument: m[2] }
+}
+
+// Content Script は isolated world なので window.__doPostBack を直接呼べない。
+// web_accessible_resources の page-bridge.js をページに注入し、
+// onload 完了後に postMessage でページコンテキストへ指示を送る。
+let bridgeReadyPromise: Promise<void> | null = null
+
+function ensurePageBridgeInjected(): Promise<void> {
+  if (bridgeReadyPromise) return bridgeReadyPromise
+  bridgeReadyPromise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script')
+    script.id = 'ku-calendar-page-bridge'
+    script.src = chrome.runtime.getURL('page-bridge.js')
+    console.log('[extension] page-bridge: script要素を注入, src=', script.src)
+    script.onload = () => {
+      console.log('[extension] page-bridge: onload fired')
+      resolve()
+    }
+    script.onerror = (e) => {
+      console.error('[extension] page-bridge: onerror', e)
+      reject(new Error('page-bridge.js load failed'))
+    }
+    ;(document.head || document.documentElement).appendChild(script)
+  })
+  return bridgeReadyPromise
+}
+
+function runPostBackInPage(eventTarget: string, eventArgument = ''): void {
+  void ensurePageBridgeInjected().then(() => {
+    console.log('[extension] postMessage送信: target=', eventTarget, 'argument=', eventArgument)
+    window.postMessage({ type: 'KU_CALENDAR_RUN_POSTBACK', eventTarget, eventArgument }, '*')
+  }).catch(e => {
+    console.error('[extension] page-bridge 読み込みエラー:', e)
+  })
+}
+
+function invokePortalLink(link: HTMLAnchorElement, label: string): void {
+  const rawHref = link.getAttribute('href') ?? ''
+  const postback = rawHref.startsWith('javascript:') ? parsePostBack(rawHref) : null
+  if (postback) {
+    console.log(`[extension] ${label}: __doPostBack検出 href=${rawHref} target=${postback.target} argument=${postback.argument}`)
+    runPostBackInPage(postback.target, postback.argument)
+  } else {
+    console.log(`[extension] ${label}: 通常リンク href=${rawHref} → link.click()`)
+    link.click()
+  }
+}
+
 /* ── メイン処理 ─────────────────────────────────────────── */
 
 function initOnDomReady() {
@@ -925,6 +980,7 @@ function initOnDomReady() {
       const pendingAction = sessionStorage.getItem(PENDING_ACTION_KEY)
       if (pendingAction) {
         sessionStorage.removeItem(PENDING_ACTION_KEY)
+        sessionStorage.removeItem(PENDING_NAV_STAGE_KEY)
         if (pendingAction === 'import') btn.click()
         else if (pendingAction === 'return') returnBtn.click()
         else if (pendingAction === 'all-q') allQBtn.click()
@@ -933,20 +989,108 @@ function initOnDomReady() {
   }
 
   // ポータルのバグでTop.aspxまたはBlank.aspxに飛んだ場合も同じパネルを表示
-  const isBuggyPortalPage = currentUrl.startsWith(PORTAL_TOP_URL) || currentUrl.startsWith(PORTAL_BLANK_URL)
+  const isTopPage = currentUrl.startsWith(PORTAL_TOP_URL)
+  const isBlankPage = currentUrl.startsWith(PORTAL_BLANK_URL)
+  const isBuggyPortalPage = isTopPage || isBlankPage
   if (isBuggyPortalPage) {
     const bugPanel = createSidePanelShell()
 
-    bugPanel.appendChild(makePanelActionBtn('今学期の時間割を登録', async () => {
-      await ensureToken()
-      sessionStorage.setItem(PENDING_ACTION_KEY, 'import')
-      window.location.href = REGIST_LIST_URL
-    }))
-    bugPanel.appendChild(makePanelActionBtn('全学期の時間割を登録', async () => {
-      await ensureToken()
-      sessionStorage.setItem(PENDING_ACTION_KEY, 'all-q')
-      window.location.href = REGIST_LIST_URL
-    }))
+    if (isBlankPage) {
+      // Blank.aspx到達時: Top.aspxから pendingAction が来ている場合に「履修時間割表」へ中継する
+      const pendingAction = sessionStorage.getItem(PENDING_ACTION_KEY)
+      const navStage = sessionStorage.getItem(PENDING_NAV_STAGE_KEY)
+      console.log('[extension] Blank.aspx到達: url=', currentUrl, 'pendingAction=', pendingAction, 'navStage=', navStage)
+
+      if (pendingAction && navStage === 'top') {
+        // 段階1完了（Top.aspx→Blank.aspx）: 「履修時間割表」を探してクリック
+        const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a'))
+        const registLink = links.find(a => a.textContent?.trim() === '履修時間割表') ?? null
+        const regRawHref = registLink?.getAttribute('href') ?? '未検出'
+        console.log('[extension] Blank.aspx: 履修時間割表リンク=', regRawHref)
+        if (registLink) {
+          sessionStorage.setItem(PENDING_NAV_STAGE_KEY, 'blank')
+          invokePortalLink(registLink, 'Blank.aspx 履修時間割表(自動)')
+        } else {
+          sessionStorage.removeItem(PENDING_ACTION_KEY)
+          sessionStorage.removeItem(PENDING_NAV_STAGE_KEY)
+          console.error('[extension] Blank.aspx: 履修時間割表リンク未検出 → 中断')
+          showOverlayError()
+        }
+      } else if (pendingAction && navStage === 'blank') {
+        // Blank.aspx を2回踏んだ → ループ検出、中断
+        sessionStorage.removeItem(PENDING_ACTION_KEY)
+        sessionStorage.removeItem(PENDING_NAV_STAGE_KEY)
+        console.error('[extension] Blank.aspx: ループ検出（navStage=blank で再到達）→ 中断')
+        showOverlayError()
+      }
+    }
+
+    if (isTopPage) {
+      // Top.aspx: 「履修・成績情報」タブをクリックして Blank.aspx へ遷移する（2段階遷移の第1段階）
+      const navigateViaTab = async (): Promise<void> => {
+        const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a'))
+        const tabLink = links.find(a => a.textContent?.trim().includes('履修・成績情報')) ?? null
+        const tabRawHref = tabLink?.getAttribute('href') ?? '未検出'
+        console.log('[extension] Top.aspx: url=', currentUrl, '履修・成績情報タブ=', tabRawHref)
+        if (tabLink) {
+          sessionStorage.setItem(PENDING_NAV_STAGE_KEY, 'top')
+          invokePortalLink(tabLink, 'Top.aspx 履修・成績情報タブ')
+        } else {
+          sessionStorage.removeItem(PENDING_ACTION_KEY)
+          sessionStorage.removeItem(PENDING_NAV_STAGE_KEY)
+          console.error('[extension] Top.aspx: 履修・成績情報タブ未検出 → 中断')
+          showOverlayError()
+        }
+        // 遷移が開始されるため、完了表示を出さずに待機する
+        await new Promise<never>(() => {})
+      }
+
+      bugPanel.appendChild(makePanelActionBtn('今学期の時間割を登録', async () => {
+        await ensureToken()
+        sessionStorage.setItem(PENDING_ACTION_KEY, 'import')
+        console.log('[extension] pendingAction=import 保存、Top.aspx: 履修・成績情報タブ経由で遷移開始')
+        await navigateViaTab()
+      }))
+      bugPanel.appendChild(makePanelActionBtn('全学期の時間割を登録', async () => {
+        await ensureToken()
+        sessionStorage.setItem(PENDING_ACTION_KEY, 'all-q')
+        console.log('[extension] pendingAction=all-q 保存、Top.aspx: 履修・成績情報タブ経由で遷移開始')
+        await navigateViaTab()
+      }))
+    } else {
+      // Blank.aspx: 「履修時間割表」を直接探してクリック（Blank.aspx上でボタンを押した場合）
+      const navigateViaRegistLink = async (): Promise<void> => {
+        const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a'))
+        const registLink = links.find(a => a.textContent?.trim() === '履修時間割表') ?? null
+        const regRawHref = registLink?.getAttribute('href') ?? '未検出'
+        console.log('[extension] Blank.aspx(ボタン): url=', currentUrl, '履修時間割表リンク=', regRawHref)
+        if (registLink) {
+          invokePortalLink(registLink, 'Blank.aspx(ボタン) 履修時間割表')
+        } else {
+          sessionStorage.removeItem(PENDING_ACTION_KEY)
+          sessionStorage.removeItem(PENDING_NAV_STAGE_KEY)
+          console.error('[extension] Blank.aspx(ボタン): 履修時間割表リンク未検出 → 中断')
+          showOverlayError()
+        }
+        await new Promise<never>(() => {})
+      }
+
+      bugPanel.appendChild(makePanelActionBtn('今学期の時間割を登録', async () => {
+        await ensureToken()
+        sessionStorage.setItem(PENDING_ACTION_KEY, 'import')
+        sessionStorage.setItem(PENDING_NAV_STAGE_KEY, 'blank')
+        console.log('[extension] pendingAction=import 保存、Blank.aspx: 履修時間割表リンク経由で遷移開始')
+        await navigateViaRegistLink()
+      }))
+      bugPanel.appendChild(makePanelActionBtn('全学期の時間割を登録', async () => {
+        await ensureToken()
+        sessionStorage.setItem(PENDING_ACTION_KEY, 'all-q')
+        sessionStorage.setItem(PENDING_NAV_STAGE_KEY, 'blank')
+        console.log('[extension] pendingAction=all-q 保存、Blank.aspx: 履修時間割表リンク経由で遷移開始')
+        await navigateViaRegistLink()
+      }))
+    }
+
     bugPanel.appendChild(makePanelNavBtn('時間割へ', async () => {
       const quarter = PANEL_QUARTER_NUM[getPanelCurrentQuarter()]
       await sendMessage<ReturnToAppResponse>({ type: 'RETURN_TO_APP', quarter })

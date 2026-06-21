@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -12,7 +12,7 @@ import {
   formatRemainingDeadline,
   groupAssignmentsByCourse,
 } from '../../lib/tasksBoard';
-import { ColumnHeader, ColumnShell, EmptyState, getTextRowStyle } from './ui';
+import { ColumnHeader, ColumnShell, EmptyState, GhostCard, getTextRowStyle } from './ui';
 
 type Props = {
   assignments: Assignment[];
@@ -24,6 +24,8 @@ type Props = {
   gripRef: (node: HTMLElement | null) => void;
   gripProps: Record<string, unknown>;
   highlighted: boolean;
+  ghostBeforeKey?: string | null;
+  activeDragLabel?: string | null;
   onSortModeChange: (mode: AssignmentSortMode) => void;
   onChangeTitle: (id: string, taskName: string) => void;
   onMoveToTodo: (id: string) => void;
@@ -40,6 +42,8 @@ export default function AssignmentColumn({
   gripRef,
   gripProps,
   highlighted,
+  ghostBeforeKey,
+  activeDragLabel,
   onSortModeChange,
   onChangeTitle,
   onMoveToTodo,
@@ -78,20 +82,46 @@ export default function AssignmentColumn({
 
       <div style={{ padding: '6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {assignments.length === 0 ? (
-          <EmptyState label="未完了の課題はありません" />
+          ghostBeforeKey !== undefined
+            ? <GhostCard label={activeDragLabel ?? null} />
+            : <EmptyState label="未完了の課題はありません" />
         ) : groups ? (
-          groups.map(group => (
-            <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div
-                className="text-[11px] font-bold flex items-center justify-between gap-3"
-                style={{ padding: '6px 8px 3px', color: 'var(--c-text-3)' }}
-              >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.label}</span>
-                <span style={{ flexShrink: 0 }}>{group.items.length}</span>
+          <>
+            {groups.map(group => (
+              <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div
+                  className="text-[11px] font-bold flex items-center justify-between gap-3"
+                  style={{ padding: '6px 8px 3px', color: 'var(--c-text-3)' }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.label}</span>
+                  <span style={{ flexShrink: 0 }}>{group.items.length}</span>
+                </div>
+                {group.items.map(a => (
+                  <Fragment key={a.id}>
+                    {ghostBeforeKey === `assignment:${a.id}` && <GhostCard label={activeDragLabel ?? null} />}
+                    <DraggableAssignmentCard
+                      assignment={a}
+                      systemTypes={systemTypes}
+                      isMobile={isMobile}
+                      onChangeTitle={onChangeTitle}
+                      onMoveToTodo={onMoveToTodo}
+                      onMoveToDone={onMoveToDone}
+                    />
+                  </Fragment>
+                ))}
               </div>
-              {group.items.map(a => (
-                <DraggableAssignmentCard
-                  key={a.id}
+            ))}
+            {ghostBeforeKey === null && <GhostCard label={activeDragLabel ?? null} />}
+          </>
+        ) : (
+          <SortableContext
+            items={assignments.map(a => `assignment:${a.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {assignments.map(a => (
+              <Fragment key={a.id}>
+                {ghostBeforeKey === `assignment:${a.id}` && <GhostCard label={activeDragLabel ?? null} />}
+                <SortableAssignmentCard
                   assignment={a}
                   systemTypes={systemTypes}
                   isMobile={isMobile}
@@ -99,25 +129,9 @@ export default function AssignmentColumn({
                   onMoveToTodo={onMoveToTodo}
                   onMoveToDone={onMoveToDone}
                 />
-              ))}
-            </div>
-          ))
-        ) : (
-          <SortableContext
-            items={assignments.map(a => `assignment:${a.id}`)}
-            strategy={verticalListSortingStrategy}
-          >
-            {assignments.map(a => (
-              <SortableAssignmentCard
-                key={a.id}
-                assignment={a}
-                systemTypes={systemTypes}
-                isMobile={isMobile}
-                onChangeTitle={onChangeTitle}
-                onMoveToTodo={onMoveToTodo}
-                onMoveToDone={onMoveToDone}
-              />
+              </Fragment>
             ))}
+            {ghostBeforeKey === null && <GhostCard label={activeDragLabel ?? null} />}
           </SortableContext>
         )}
       </div>

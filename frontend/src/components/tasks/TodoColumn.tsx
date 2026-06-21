@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Todo } from '../../api/tasks';
 import { type TodoColumnItem, type TodoViewMode, todoColumnItemKey } from '../../lib/tasksBoard';
-import { ColumnHeader, ColumnShell, EmptyState } from './ui';
+import { ColumnHeader, ColumnShell, EmptyState, GhostCard } from './ui';
 import TodoBlock, { type AssignmentFocusField, type CaretPos } from './TodoBlock';
 
 type Props = {
@@ -16,6 +16,8 @@ type Props = {
   gripRef: (node: HTMLElement | null) => void;
   gripProps: Record<string, unknown>;
   highlighted: boolean;
+  ghostBeforeKey?: string | null;
+  activeDragLabel?: string | null;
   onViewModeChange: (mode: TodoViewMode) => void;
   onChangeTitle: (id: string, title: string) => void;
   onChangeAssignmentTitle: (id: string, taskName: string) => void;
@@ -42,6 +44,8 @@ export default function TodoColumn({
   gripRef,
   gripProps,
   highlighted,
+  ghostBeforeKey,
+  activeDragLabel,
   onViewModeChange,
   onChangeTitle,
   onChangeAssignmentTitle,
@@ -146,7 +150,9 @@ export default function TodoColumn({
 
       <div>
         {renderItems.length === 0 ? (
-          <EmptyState label={emptyLabel} />
+          ghostBeforeKey !== undefined
+            ? <GhostCard label={activeDragLabel ?? null} />
+            : <EmptyState label={emptyLabel} />
         ) : (
           <SortableContext items={itemKeys} strategy={verticalListSortingStrategy}>
             <div
@@ -160,35 +166,39 @@ export default function TodoColumn({
               }}
             >
               {renderItems.map((item, index) => {
+                const itemKey = todoColumnItemKey(item);
                 const id = item.type === 'todo' ? item.todo.id : item.assignment.id;
                 const isLast = viewMode === 'text' && index === renderItems.length - 1;
                 return (
-                  <TodoBlock
-                    key={todoColumnItemKey(item)}
-                    item={item}
-                    variant={viewMode}
-                    lineNumber={viewMode === 'text' ? index + 1 : undefined}
-                    isLast={isLast}
-                    systemTypes={systemTypes}
-                    isMobile={isMobile}
-                    busy={busyKeys.has(`todo-delete-${id}`)}
-                    autoFocus={focusTarget?.id === id}
-                    caret={focusTarget?.id === id ? focusTarget.caret : 'end'}
-                    focusField={focusTarget?.id === id ? focusTarget.field : undefined}
-                    onConsumeFocus={() => setFocusTarget(null)}
-                    onChangeTitle={onChangeTitle}
-                    onChangeAssignmentTitle={onChangeAssignmentTitle}
-                    onCreateBelow={tid => void handleCreateBelow(tid)}
-                    onCreateBefore={tid => void handleCreateBefore(tid)}
-                    onDeleteBlock={handleDeleteBlock}
-                    onNavigate={handleNavigate}
-                    onEnsureTrailingBlock={ensureTrailingEmptyBlock}
-                    onMoveAssignmentToAssignment={viewMode === 'list' && item.type === 'assignment' ? () => onMoveAssignmentToAssignment(item.assignment.id) : undefined}
-                    onMoveAssignmentToDone={viewMode === 'list' && item.type === 'assignment' ? () => onMoveAssignmentToDone(item.assignment.id) : undefined}
-                    onMoveTodoToDone={viewMode === 'list' && item.type === 'todo' ? () => onMoveTodoToDone(item.todo.id) : undefined}
-                  />
+                  <Fragment key={itemKey}>
+                    {ghostBeforeKey === itemKey && <GhostCard label={activeDragLabel ?? null} />}
+                    <TodoBlock
+                      item={item}
+                      variant={viewMode}
+                      lineNumber={viewMode === 'text' ? index + 1 : undefined}
+                      isLast={isLast}
+                      systemTypes={systemTypes}
+                      isMobile={isMobile}
+                      busy={busyKeys.has(`todo-delete-${id}`)}
+                      autoFocus={focusTarget?.id === id}
+                      caret={focusTarget?.id === id ? focusTarget.caret : 'end'}
+                      focusField={focusTarget?.id === id ? focusTarget.field : undefined}
+                      onConsumeFocus={() => setFocusTarget(null)}
+                      onChangeTitle={onChangeTitle}
+                      onChangeAssignmentTitle={onChangeAssignmentTitle}
+                      onCreateBelow={tid => void handleCreateBelow(tid)}
+                      onCreateBefore={tid => void handleCreateBefore(tid)}
+                      onDeleteBlock={handleDeleteBlock}
+                      onNavigate={handleNavigate}
+                      onEnsureTrailingBlock={ensureTrailingEmptyBlock}
+                      onMoveAssignmentToAssignment={viewMode === 'list' && item.type === 'assignment' ? () => onMoveAssignmentToAssignment(item.assignment.id) : undefined}
+                      onMoveAssignmentToDone={viewMode === 'list' && item.type === 'assignment' ? () => onMoveAssignmentToDone(item.assignment.id) : undefined}
+                      onMoveTodoToDone={viewMode === 'list' && item.type === 'todo' ? () => onMoveTodoToDone(item.todo.id) : undefined}
+                    />
+                  </Fragment>
                 );
               })}
+              {ghostBeforeKey === null && <GhostCard label={activeDragLabel ?? null} />}
             </div>
           </SortableContext>
         )}

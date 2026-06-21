@@ -119,6 +119,8 @@ export default function TasksPage() {
 
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [dropTargetColumn, setDropTargetColumn] = useState<ColumnKey | null>(null);
+  type CrossColumnGhost = { column: ColumnKey; beforeKey: string | null };
+  const [crossColumnGhost, setCrossColumnGhost] = useState<CrossColumnGhost | null>(null);
 
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<ColumnKey>('assignment');
@@ -598,9 +600,24 @@ export default function TasksPage() {
     const activeType = event.active.data.current?.type;
     if (activeType === 'column') {
       setDropTargetColumn(null);
+      setCrossColumnGhost(null);
       return;
     }
-    setDropTargetColumn(resolveOverColumn(event.over?.data.current as Record<string, unknown> | undefined));
+    const activeColumn = event.active.data.current?.column as ColumnKey | undefined;
+    const overData = event.over?.data.current as Record<string, unknown> | undefined;
+    const targetColumn = resolveOverColumn(overData);
+    setDropTargetColumn(targetColumn);
+
+    if (activeColumn && targetColumn && activeColumn !== targetColumn) {
+      const overType = overData?.type as string | undefined;
+      const isOverItem = overType && overType !== 'column';
+      setCrossColumnGhost({
+        column: targetColumn,
+        beforeKey: isOverItem ? String(event.over!.id) : null,
+      });
+    } else {
+      setCrossColumnGhost(null);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -608,6 +625,7 @@ export default function TasksPage() {
     const overData = event.over?.data.current as Record<string, unknown> | undefined;
     setActiveDrag(null);
     setDropTargetColumn(null);
+    setCrossColumnGhost(null);
     if (!active) return;
 
     const targetColumn = resolveOverColumn(overData);
@@ -860,12 +878,15 @@ export default function TasksPage() {
             onDragCancel={() => {
               setActiveDrag(null);
               setDropTargetColumn(null);
+              setCrossColumnGhost(null);
             }}
           >
             <KanbanBoard
               isMobile={isMobile}
               visibleOrder={mobileVisibleOrder}
               dropTargetColumn={dropTargetColumn}
+              crossColumnGhost={crossColumnGhost}
+              activeDragLabel={overlayLabel}
               columnShares={resolvedShares}
               pendingAssignments={assignmentColumnItems}
               todoColumnItems={todoColumnItems}

@@ -276,12 +276,7 @@ chrome.runtime.onMessage.addListener(
                 if (t?.windowId != null) {
                   chrome.windows.update(t.windowId, { focused: true })
                 }
-                // 既存タブの再利用時は、古いSPAの状態・bfcache・キャッシュ済みJS/CSSが
-                // 残っている可能性があるため、updateの完了を待って強制リロードする
-                console.log('[background] RETURN_TO_APP: tabs.reload(bypassCache=true) executing on tabId=', savedAppTabId)
-                chrome.tabs.reload(savedAppTabId, { bypassCache: true }, () => {
-                  closePortal()
-                })
+                closePortal()
               })
             }
           })

@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type DoneItem, buildAssignmentHref, formatCourseName, formatDateTime } from '../../lib/tasksBoard';
-import { ColumnHeader, ColumnShell, EmptyState, getTextRowStyle } from './ui';
+import { ColumnHeader, ColumnShell, EmptyState, GhostCard, getTextRowStyle } from './ui';
 import { MobileMenu, MobileMenuItem } from './AssignmentColumn';
 
 type Props = {
@@ -15,6 +15,8 @@ type Props = {
   gripRef: (node: HTMLElement | null) => void;
   gripProps: Record<string, unknown>;
   highlighted: boolean;
+  ghostBeforeKey?: string | null;
+  activeDragLabel?: string | null;
   onDeleteTodo: (id: string) => void;
   onDeleteAssignment: (id: string) => void;
   onMoveAssignmentToAssignment: (id: string) => void;
@@ -33,6 +35,8 @@ export default function DoneColumn({
   gripRef,
   gripProps,
   highlighted,
+  ghostBeforeKey,
+  activeDragLabel,
   onDeleteTodo,
   onDeleteAssignment,
   onMoveAssignmentToAssignment,
@@ -49,30 +53,38 @@ export default function DoneColumn({
           完了から1週間で自動的に消えます。TODOはドラッグで戻せます。
         </div>
         {items.length === 0 ? (
-          <EmptyState label="完了したタスクはありません" />
+          ghostBeforeKey !== undefined
+            ? <GhostCard label={activeDragLabel ?? null} />
+            : <EmptyState label="完了したタスクはありません" />
         ) : (
           <SortableContext
             items={items.map(item => `done:${item.kind}:${item.data.id}`)}
             strategy={verticalListSortingStrategy}
           >
             <div style={{ padding: '6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {items.map(item => (
-                <DoneCard
-                  key={`${item.kind}:${item.data.id}`}
-                  item={item}
-                  systemTypes={systemTypes}
-                  isMobile={isMobile}
-                  busy={
-                    item.kind === 'todo'
-                      ? busyKeys.has(`todo-toggle-${item.data.id}`) || busyKeys.has(`todo-delete-${item.data.id}`)
-                      : busyKeys.has(`assignment-delete-${item.data.id}`) || busyKeys.has(`assignment-done-${item.data.id}`)
-                  }
-                  onDelete={() => (item.kind === 'todo' ? onDeleteTodo(item.data.id) : onDeleteAssignment(item.data.id))}
-                  onMoveToAssignment={item.kind === 'assignment' ? () => onMoveAssignmentToAssignment(item.data.id) : undefined}
-                  onMoveToTodo={item.kind === 'assignment' ? () => onMoveAssignmentToTodo(item.data.id) : () => onMoveTodoToTodo(item.data.id)}
-                  onChangeTitle={item.kind === 'assignment' ? (title: string) => onChangeAssignmentTitle(item.data.id, title) : undefined}
-                />
-              ))}
+              {items.map(item => {
+                const itemKey = `done:${item.kind}:${item.data.id}`;
+                return (
+                  <Fragment key={`${item.kind}:${item.data.id}`}>
+                    {ghostBeforeKey === itemKey && <GhostCard label={activeDragLabel ?? null} />}
+                    <DoneCard
+                      item={item}
+                      systemTypes={systemTypes}
+                      isMobile={isMobile}
+                      busy={
+                        item.kind === 'todo'
+                          ? busyKeys.has(`todo-toggle-${item.data.id}`) || busyKeys.has(`todo-delete-${item.data.id}`)
+                          : busyKeys.has(`assignment-delete-${item.data.id}`) || busyKeys.has(`assignment-done-${item.data.id}`)
+                      }
+                      onDelete={() => (item.kind === 'todo' ? onDeleteTodo(item.data.id) : onDeleteAssignment(item.data.id))}
+                      onMoveToAssignment={item.kind === 'assignment' ? () => onMoveAssignmentToAssignment(item.data.id) : undefined}
+                      onMoveToTodo={item.kind === 'assignment' ? () => onMoveAssignmentToTodo(item.data.id) : () => onMoveTodoToTodo(item.data.id)}
+                      onChangeTitle={item.kind === 'assignment' ? (title: string) => onChangeAssignmentTitle(item.data.id, title) : undefined}
+                    />
+                  </Fragment>
+                );
+              })}
+              {ghostBeforeKey === null && <GhostCard label={activeDragLabel ?? null} />}
             </div>
           </SortableContext>
         )}

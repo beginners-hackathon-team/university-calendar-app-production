@@ -123,7 +123,10 @@ export default function CoursesPage() {
             target="_blank"
             rel="noopener noreferrer"
             className="ku-portal-btn shrink-0"
-            style={{ padding: '5px 8px', fontSize: 11, gap: 3 }}
+            style={isMobile
+              ? { padding: '5px 8px', fontSize: 11, gap: 3 }
+              : { padding: '7px 14px', fontSize: 13, gap: 4 }
+            }
           >
             時間割登録
             <ArrowUpRight />

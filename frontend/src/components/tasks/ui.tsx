@@ -167,6 +167,28 @@ export function getTextRowStyle(
   };
 }
 
+export function GhostCard({ label }: { label: string | null }) {
+  return (
+    <div
+      className="text-[13px] font-semibold"
+      style={{
+        padding: '9px 14px',
+        border: '2px dashed var(--c-accent)',
+        borderRadius: 8,
+        background: 'rgba(84, 104, 166, 0.06)',
+        color: 'var(--c-accent)',
+        opacity: 0.65,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        pointerEvents: 'none',
+      }}
+    >
+      {label ?? ''}
+    </div>
+  );
+}
+
 export function EmptyState({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4" style={{ color: 'var(--c-text-3)' }}>
