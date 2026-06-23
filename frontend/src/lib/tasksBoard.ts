@@ -50,6 +50,7 @@ const COLUMN_SHARES_KEY = 'ku-board-shares';
 const TODO_COLUMN_ORDER_KEY = 'ku-todo-column-order';
 const TODO_COLUMN_ASSIGNMENTS_KEY = 'ku-todo-column-assignments';
 const TODO_VIEW_MODE_KEY = 'ku-todo-view-mode';
+const MOBILE_TAB_KEY = 'ku-mobile-tab';
 
 // 列の幅は固定px ではなく、表示中の列同士で分け合う比率（flex-grow の重み）として持つ。
 // 列の表示/非表示が切り替わるたびに等分（1:1:1 など）へリセットされる。
@@ -347,6 +348,23 @@ export function loadTodoViewMode(): TodoViewMode {
 export function saveTodoViewMode(mode: TodoViewMode): void {
   try {
     localStorage.setItem(TODO_VIEW_MODE_KEY, mode);
+  } catch {
+    // 無視
+  }
+}
+
+export function loadMobileTab(): ColumnKey {
+  try {
+    const saved = localStorage.getItem(MOBILE_TAB_KEY);
+    return isColumnKey(saved) ? saved : 'assignment';
+  } catch {
+    return 'assignment';
+  }
+}
+
+export function saveMobileTab(tab: ColumnKey): void {
+  try {
+    localStorage.setItem(MOBILE_TAB_KEY, tab);
   } catch {
     // 無視
   }

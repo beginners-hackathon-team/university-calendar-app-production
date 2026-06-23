@@ -3,6 +3,10 @@
 
 import { ACANTHUS_HOST, LMS_HOST } from '../shared/urls'
 
+// インストール済みであることを Web アプリに通知
+console.log('[ku-calendar-extension] appContent injected, sending EXTENSION_INSTALLED')
+window.postMessage({ source: 'ku-calendar-extension', type: 'EXTENSION_INSTALLED' }, '*')
+
 const QUARTER_MAP: Record<string, number> = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 }
 
 const LMS_ANCHOR_SELECTOR = `a[href*="${ACANTHUS_HOST}"], a[href*="${LMS_HOST}"]`

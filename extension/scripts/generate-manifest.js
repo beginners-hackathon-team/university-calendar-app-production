@@ -45,9 +45,24 @@ const appUrl = APP_URL.replace(/\/+$/, '')
 const supabaseUrl = SUPABASE_URL.replace(/\/+$/, '')
 
 const template = fs.readFileSync(path.join(root, 'manifest.template.json'), 'utf8')
-const manifest = template
+const replaced = template
   .replace(/__APP_URL__/g, appUrl)
   .replace(/__SUPABASE_URL__/g, supabaseUrl)
 
-fs.writeFileSync(path.join(root, 'manifest.json'), manifest)
+const parsed = JSON.parse(replaced)
+
+// development ビルドでは localhost:5173 も content script の対象に加える
+if (mode === 'development') {
+  const DEV_URL = 'http://localhost:5173'
+  if (!parsed.host_permissions.includes(`${DEV_URL}/*`)) {
+    parsed.host_permissions.push(`${DEV_URL}/*`)
+  }
+  for (const cs of parsed.content_scripts) {
+    if (cs.js?.includes('appContent.js') && !cs.matches.includes(`${DEV_URL}/*`)) {
+      cs.matches.push(`${DEV_URL}/*`)
+    }
+  }
+}
+
+fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify(parsed, null, 2) + '\n')
 console.log(`[generate-manifest] Generated manifest.json (${mode}): APP_URL=${appUrl}`)

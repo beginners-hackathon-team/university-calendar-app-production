@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "金沢大学カレンダー同期",
-  "version": "1.0.2",
-  "description": "金沢大学ポータルとWebClass LMSから履修情報・課題情報を取得し、KU Calendarに同期します。",
+  "name": "KU-tasks同期",
+  "version": "1.0.3",
+  "description": "金沢大学ポータルとWebClass LMSから履修情報・課題情報を取得し、KU-tasksに同期します。",
   "permissions": ["storage", "tabs"],
   "icons": {
     "16": "icons/16.png",
@@ -21,7 +21,8 @@
     "https://eduweb.sta.kanazawa-u.ac.jp/*",
     "https://lms-wc.el.kanazawa-u.ac.jp/*",
     "https://ku-calendar-app.onrender.com/*",
-    "https://lzpofmjgptzfjhkiqbqp.supabase.co/*"
+    "https://lzpofmjgptzfjhkiqbqp.supabase.co/*",
+    "http://localhost:5173/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -44,7 +45,10 @@
       "run_at": "document_start"
     },
     {
-      "matches": ["https://ku-calendar-app.onrender.com/*"],
+      "matches": [
+        "https://ku-calendar-app.onrender.com/*",
+        "http://localhost:5173/*"
+      ],
       "js": ["appContent.js"]
     }
   ]

@@ -65,6 +65,7 @@ import {
   loadTodoColumnAssignmentIds,
   loadTodoColumnOrder,
   loadTodoViewMode,
+  loadMobileTab,
   saveAssignmentColumnOrder,
   saveAssignmentSortMode,
   saveBoardOrder,
@@ -74,6 +75,7 @@ import {
   saveTodoColumnAssignmentIds,
   saveTodoColumnOrder,
   saveTodoViewMode,
+  saveMobileTab,
   todoColumnItemKey,
 } from '../lib/tasksBoard';
 import KanbanBoard from '../components/tasks/KanbanBoard';
@@ -123,7 +125,7 @@ export default function TasksPage() {
   const [crossColumnGhost, setCrossColumnGhost] = useState<CrossColumnGhost | null>(null);
 
   const isMobile = useIsMobile();
-  const [mobileTab, setMobileTab] = useState<ColumnKey>('assignment');
+  const [mobileTab, setMobileTab] = useState<ColumnKey>(loadMobileTab);
   const touchStartX = useRef<number | null>(null);
 
   const sensors = useSensors(
@@ -783,7 +785,7 @@ export default function TasksPage() {
         const tabs: ColumnKey[] = ['assignment', 'todo', 'done'];
         const idx = tabs.indexOf(mobileTab);
         const next = delta < 0 ? tabs[idx + 1] : tabs[idx - 1];
-        if (next) setMobileTab(next);
+        if (next) { setMobileTab(next); saveMobileTab(next); }
       } : undefined}
     >
       <div className="mx-auto px-3 py-4 sm:px-5 sm:py-8" style={{ maxWidth: 1400 }}>
@@ -829,7 +831,7 @@ export default function TasksPage() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setMobileTab(key)}
+                    onClick={() => { setMobileTab(key); saveMobileTab(key); }}
                     aria-pressed={active}
                     className="text-[13px] font-semibold"
                     style={{

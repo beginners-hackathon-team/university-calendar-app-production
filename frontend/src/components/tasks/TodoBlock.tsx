@@ -143,6 +143,8 @@ export default function TodoBlock({
   const [focused, setFocused] = useState(false);
   // モバイルでカードをタップしたときにボタン類を展開する。
   const [expanded, setExpanded] = useState(false);
+  // モバイルメニューの「編集」から TodoBlockContent の編集モードを起動する ref。
+  const startTodoEditRef = useRef<(() => void) | null>(null);
 
   const isListVariant = variant === 'list';
 
@@ -230,6 +232,7 @@ export default function TodoBlock({
           onNavigate={onNavigate}
           onEnsureTrailingBlock={onEnsureTrailingBlock}
           onMoveToDone={onMoveTodoToDone}
+          startEditRef={startTodoEditRef}
         />
       )}
     </div>
@@ -284,6 +287,14 @@ export default function TodoBlock({
                   trailing="→"
                 >
                   完了へ
+                </MobileMenuItem>
+              )}
+              {item.type === 'todo' && (
+                <MobileMenuItem
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => { startTodoEditRef.current?.(); setExpanded(false); }}
+                >
+                  編集
                 </MobileMenuItem>
               )}
               {item.type === 'todo' && (
@@ -682,6 +693,7 @@ function TodoBlockContent({
   onNavigate,
   onEnsureTrailingBlock,
   onMoveToDone,
+  startEditRef,
 }: {
   todo: Todo;
   busy: boolean;
@@ -702,6 +714,7 @@ function TodoBlockContent({
   onNavigate: (id: string, dir: 'prev' | 'next') => void;
   onEnsureTrailingBlock?: (id: string) => void;
   onMoveToDone?: () => void;
+  startEditRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState(todo.title);
@@ -758,6 +771,19 @@ function TodoBlockContent({
     onConsumeFocus?.();
   }, [isEditing, onConsumeFocus]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // モバイルメニューの「編集」から呼び出せるように ref に関数を登録する。
+  useEffect(() => {
+    if (startEditRef) {
+      startEditRef.current = () => {
+        pendingFocusRef.current = 'end';
+        setIsListEditing(true);
+      };
+    }
+    return () => {
+      if (startEditRef) startEditRef.current = null;
+    };
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
   const commit = (value: string) => {
     if (value !== todo.title) onChangeTitle(todo.id, value);
   };
@@ -765,6 +791,27 @@ function TodoBlockContent({
   const scheduleCommit = (value: string) => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => commit(value), 300);
+  };
+
+  // PC では keydown → beforeinput の順で発火し、keydown で preventDefault() すると
+  // beforeinput は発火しない。モバイルでは keydown が発火しないため beforeinput で補完する。
+  const applyEmptyLineEnter = (el: HTMLTextAreaElement, preventDefault: () => void) => {
+    const caretStart = el.selectionStart ?? 0;
+    if (isCurrentLineEmpty(draft, caretStart)) {
+      preventDefault();
+      const cleaned = draft.replace(/\n+$/, '');
+      setDraft(cleaned);
+      commit(cleaned);
+      onCreateBelow(todo.id);
+      return true;
+    }
+    return false;
+  };
+
+  const handleBeforeInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    if (variant !== 'text') return;
+    if ((e.nativeEvent as InputEvent).inputType !== 'insertLineBreak') return;
+    applyEmptyLineEnter(e.currentTarget, () => e.preventDefault());
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -783,14 +830,8 @@ function TodoBlockContent({
     const collapsed = el.selectionStart === el.selectionEnd;
 
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      if (isCurrentLineEmpty(draft, caretStart)) {
-        e.preventDefault();
-        const cleaned = draft.replace(/\n+$/, '');
-        setDraft(cleaned);
-        commit(cleaned);
-        onCreateBelow(todo.id);
-        return;
-      }
+      // PC キーボードはここで処理。成功すると beforeinput は発火しない。
+      applyEmptyLineEnter(el, () => e.preventDefault());
       return;
     }
 
@@ -828,7 +869,7 @@ function TodoBlockContent({
   const showMoveButtons = isMobile ? false : ((hovered || focused) && !isListEditing && variant === 'list');
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) auto', alignItems: 'start', gap: 6 }}>
       <div>
         {isEditing ? (
           <textarea
@@ -848,6 +889,7 @@ function TodoBlockContent({
               commit(draft);
               if (variant === 'text' && isLast && draft.trim() !== '') onEnsureTrailingBlock?.(todo.id);
             }}
+            onBeforeInput={handleBeforeInput}
             onKeyDown={handleKeyDown}
             className="text-[13.5px]"
             style={{
@@ -866,16 +908,17 @@ function TodoBlockContent({
             }}
           />
         ) : (
-          // リストモード: 通常時はテキスト表示、クリックで編集開始。
+          // リストモード: 通常時はテキスト表示。デスクトップはクリックで編集開始、
+          // モバイルはタップをバブルアップさせてカードのメニューを開く。
           <div
             onClick={(e) => {
-              if (isMobile) e.stopPropagation();
+              if (isMobile) return;
               pendingFocusRef.current = 'end';
               setIsListEditing(true);
             }}
             className="text-[13.5px]"
             style={{
-              cursor: 'text',
+              cursor: isMobile ? 'default' : 'text',
               color: draft ? 'var(--c-text-1)' : 'var(--c-text-3)',
               lineHeight: '1.55',
               padding: 0,
@@ -885,10 +928,10 @@ function TodoBlockContent({
               display: isMobile ? 'inline-block' : 'block',
             }}
           >
-            {draft || 'クリックして編集'}
+            {draft || (isMobile ? '' : 'クリックして編集')}
           </div>
         )}
-        {onMoveToDone && (
+        {!isMobile && onMoveToDone && (
           <div
             onClick={e => e.stopPropagation()}
             style={{
@@ -903,25 +946,27 @@ function TodoBlockContent({
         )}
       </div>
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={(e) => { e.stopPropagation(); onDeleteBlock(todo.id, false); }}
-        className="text-[13px]"
-        aria-label="削除"
-        title="削除"
-        style={{
-          border: 'none',
-          background: 'transparent',
-          color: 'var(--c-text-3)',
-          cursor: busy ? 'not-allowed' : 'pointer',
-          lineHeight: '24px',
-          opacity: showDelete ? 0.7 : 0,
-          transition: 'opacity 0.12s',
-        }}
-      >
-        ×
-      </button>
+      {!isMobile && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(e) => { e.stopPropagation(); onDeleteBlock(todo.id, false); }}
+          className="text-[13px]"
+          aria-label="削除"
+          title="削除"
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--c-text-3)',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            lineHeight: '24px',
+            opacity: showDelete ? 0.7 : 0,
+            transition: 'opacity 0.12s',
+          }}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }
