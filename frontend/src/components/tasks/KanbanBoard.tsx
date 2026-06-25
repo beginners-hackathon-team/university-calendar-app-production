@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Assignment } from '../../api/tasks';
-import { MIN_SHARE_FRACTION, type AssignmentSortMode, type ColumnKey, type DoneItem, type TodoColumnItem, type TodoViewMode } from '../../lib/tasksBoard';
+import { MIN_SHARE_FRACTION, type AssignmentFilterMode, type AssignmentSortMode, type ColumnKey, type DoneItem, type TodoColumnItem, type TodoViewMode } from '../../lib/tasksBoard';
 import AssignmentColumn from './AssignmentColumn';
 import TodoColumn from './TodoColumn';
 import DoneColumn from './DoneColumn';
@@ -22,7 +22,9 @@ type Props = {
   systemTypes: Record<string, string | null>;
   busyKeys: Set<string>;
   assignmentSortMode: AssignmentSortMode;
+  assignmentFilterMode: AssignmentFilterMode;
   onAssignmentSortModeChange: (mode: AssignmentSortMode) => void;
+  onAssignmentFilterModeChange: (mode: AssignmentFilterMode) => void;
   onTodoViewModeChange: (mode: TodoViewMode) => void;
   onCreateTodo: (title: string) => void;
   onChangeTodoTitle: (id: string, title: string) => void;
@@ -218,6 +220,7 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
       <AssignmentColumn
         assignments={props.pendingAssignments}
         sortMode={props.assignmentSortMode}
+        filterMode={props.assignmentFilterMode}
         systemTypes={props.systemTypes}
         isMobile={props.isMobile}
         setNodeRef={slot.setNodeRef}
@@ -228,6 +231,7 @@ function renderColumn(key: ColumnKey, props: Props, slot: SlotProps): ReactNode 
         ghostBeforeKey={ghostBeforeKey}
         activeDragLabel={props.activeDragLabel}
         onSortModeChange={props.onAssignmentSortModeChange}
+        onFilterModeChange={props.onAssignmentFilterModeChange}
         onChangeTitle={props.onChangeAssignmentTitle}
         onMoveToTodo={props.onMoveAssignmentToTodo}
         onMoveToDone={props.onMoveAssignmentToDone}

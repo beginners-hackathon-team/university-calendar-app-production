@@ -31,6 +31,7 @@ from app.schemas.task import (
     AssignmentPublic,
     UpdateAssignmentDone,
     UpdateAssignmentTitle,
+    UpdateAssignmentBoardStatus,
     ImportAssignmentsPayload,
     ImportLmsTasksPayload,
     TodoPublic,
@@ -780,6 +781,7 @@ def import_lms_tasks(
             existing_a.is_due_estimated = has_end
             existing_a.source_url = item.source_url
             existing_a.source_provider = provider
+            existing_a.is_active_url = item.is_active_url
             if item.content_id:
                 existing_a.task_contents_id = item.content_id
             if existing_a.is_done:
@@ -801,6 +803,7 @@ def import_lms_tasks(
                     availability_start=item.available_from,
                     availability_end=item.available_until,
                     is_due_estimated=has_end,
+                    is_active_url=item.is_active_url,
                     result="",
                     type="assignment",
                     source_type="lms",
@@ -912,6 +915,35 @@ def update_assignment_done(
         raise HTTPException(status_code=404, detail="Assignment not found")
     a.is_done = body.is_done
     a.done_at = datetime.now(timezone.utc) if body.is_done else None
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.put("/api/assignments/{assignment_id}/board-status")
+def update_assignment_board_status(
+    assignment_id: str,
+    body: UpdateAssignmentBoardStatus,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    a = (
+        db.query(Task)
+        .filter(
+            Task.id == assignment_id,
+            Task.user_id == current_user.user_id,
+            Task.type == "assignment",
+        )
+        .one_or_none()
+    )
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    a.board_status = body.board_status
+    if body.board_status == "done":
+        a.is_done = True
+        a.done_at = datetime.now(timezone.utc)
+    else:
+        a.is_done = False
+        a.done_at = None
     db.commit()
     return {"status": "ok"}
 

@@ -34,7 +34,7 @@ import type { Assignment, Todo } from '../api/tasks';
 import {
   fetchAssignments,
   fetchLmsSystemTypes,
-  updateAssignmentDone,
+  updateAssignmentBoardStatus,
   updateAssignmentTitle,
   deleteAssignment,
   fetchTodos,
@@ -44,6 +44,7 @@ import {
 } from '../api/tasks';
 import {
   type AssignmentSortMode,
+  type AssignmentFilterMode,
   type BoardVisible,
   type ColumnKey,
   type DoneItem,
@@ -55,24 +56,25 @@ import {
   applyTodoColumnOrder,
   columnLabels,
   doneColumnItemKey,
+  filterAssignmentsByDeadline,
   getDoneTime,
   loadAssignmentColumnOrder,
+  loadAssignmentFilterMode,
   loadAssignmentSortMode,
   loadBoardOrder,
   loadBoardVisible,
   loadColumnShares,
   loadDoneColumnOrder,
-  loadTodoColumnAssignmentIds,
   loadTodoColumnOrder,
   loadTodoViewMode,
   loadMobileTab,
   saveAssignmentColumnOrder,
+  saveAssignmentFilterMode,
   saveAssignmentSortMode,
   saveBoardOrder,
   saveBoardVisible,
   saveColumnShares,
   saveDoneColumnOrder,
-  saveTodoColumnAssignmentIds,
   saveTodoColumnOrder,
   saveTodoViewMode,
   saveMobileTab,
@@ -104,12 +106,11 @@ export default function TasksPage() {
   const [busyKeys, setBusyKeys] = useState<Set<string>>(() => new Set());
 
   const [assignmentSortMode, setAssignmentSortMode] = useState<AssignmentSortMode>(loadAssignmentSortMode);
+  const [assignmentFilterMode, setAssignmentFilterMode] = useState<AssignmentFilterMode>(loadAssignmentFilterMode);
   const [visible, setVisible] = useState<BoardVisible>(loadBoardVisible);
   const [order, setOrder] = useState<ColumnKey[]>(loadBoardOrder);
   const [columnShares, setColumnShares] = useState<Partial<Record<ColumnKey, number>>>(loadColumnShares);
 
-  // TODOカラムへユーザーが手動で送った課題のID（自動移動はしない）。
-  const [todoAssignmentIds, setTodoAssignmentIds] = useState<string[]>(loadTodoColumnAssignmentIds);
   // TODOカラム内（TODO本体・送られた課題を含む）の並び順。
   const [todoColumnOrder, setTodoColumnOrder] = useState<string[]>(loadTodoColumnOrder);
   // TODOカラムの表示モード（リスト / テキスト）。
@@ -170,25 +171,26 @@ export default function TasksPage() {
     void loadTasks();
   }, []);
 
-  const pendingAssignments = useMemo(() => assignments.filter(a => !a.is_done), [assignments]);
-
-  // TODOへ送られた課題（ユーザー操作のみで管理。期限による自動移動はしない）。
-  const todoColumnAssignments = useMemo(
-    () => pendingAssignments.filter(a => todoAssignmentIds.includes(a.id)),
-    [pendingAssignments, todoAssignmentIds],
-  );
-
-  // 課題カラムに表示する課題（TODOへ送ったものは除外、手動並び順を適用）。
+  // board_status が 'assignment' の課題を課題カラムに表示（期限フィルタ・手動並び順を適用）。
   const assignmentColumnItems = useMemo(
     () => applyAssignmentColumnOrder(
-      pendingAssignments.filter(a => !todoAssignmentIds.includes(a.id)),
+      filterAssignmentsByDeadline(
+        assignments.filter(a => a.board_status === 'assignment'),
+        assignmentFilterMode,
+      ),
       assignmentColumnOrder,
       assignmentSortMode,
     ),
-    [pendingAssignments, todoAssignmentIds, assignmentColumnOrder, assignmentSortMode],
+    [assignments, assignmentColumnOrder, assignmentSortMode, assignmentFilterMode],
   );
   const assignmentColumnItemsRef = useRef<typeof assignmentColumnItems>([]);
   assignmentColumnItemsRef.current = assignmentColumnItems;
+
+  // board_status が 'todo' の課題をTODOカラムに表示。
+  const todoColumnAssignments = useMemo(
+    () => assignments.filter(a => a.board_status === 'todo'),
+    [assignments],
+  );
 
   const pendingTodos = useMemo(() => todos.filter(t => !t.is_done), [todos]);
 
@@ -206,7 +208,7 @@ export default function TasksPage() {
 
   const doneItems = useMemo<DoneItem[]>(() => {
     const raw: DoneItem[] = [
-      ...assignments.filter(a => a.is_done).map(a => ({ kind: 'assignment' as const, data: a })),
+      ...assignments.filter(a => a.board_status === 'done').map(a => ({ kind: 'assignment' as const, data: a })),
       ...todos.filter(t => t.is_done).map(t => ({ kind: 'todo' as const, data: t })),
     ].sort((a, b) => getDoneTime(b) - getDoneTime(a));
     return applyDoneColumnOrder(raw, doneColumnOrder);
@@ -240,6 +242,11 @@ export default function TasksPage() {
     saveAssignmentColumnOrder([]);
   };
 
+  const handleAssignmentFilterChange = (mode: AssignmentFilterMode) => {
+    setAssignmentFilterMode(mode);
+    saveAssignmentFilterMode(mode);
+  };
+
   const toggleColumn = (key: ColumnKey) => {
     setVisible(prev => {
       const next = { ...prev, [key]: !prev[key] };
@@ -256,19 +263,33 @@ export default function TasksPage() {
     saveTodoViewMode(mode);
   };
 
-  // ---- 課題 ⇄ TODOカラムの所属管理 ------------------------------------
+  // ---- board_status API（楽観更新付き） ----------------------------
 
-  // insertBeforeKey が指定された場合はその直前に挿入、省略時は末尾に追加。
-  const addAssignmentToTodoColumn = (id: string, insertBeforeKey?: string) => {
-    setTodoAssignmentIds(prev => {
-      if (prev.includes(id)) return prev;
-      const next = [...prev, id];
-      saveTodoColumnAssignmentIds(next);
-      return next;
-    });
-    setTodoColumnOrder(() => {
-      const key = `assignment:${id}`;
-      const currentKeys = todoColumnItemsRef.current.map(todoColumnItemKey);
+  const moveBoardStatus = async (id: string, status: 'assignment' | 'todo' | 'done') => {
+    const snapshot = assignments.find(a => a.id === id);
+    if (!snapshot) return;
+    const now = new Date().toISOString();
+    setAssignments(prev => prev.map(a => a.id === id ? {
+      ...a,
+      board_status: status,
+      is_done: status === 'done',
+      done_at: status === 'done' ? now : null,
+    } : a));
+    try {
+      await updateAssignmentBoardStatus(id, status);
+    } catch (err) {
+      console.error(err);
+      setAssignments(prev => prev.map(a => a.id === id ? snapshot : a));
+      setError('課題の移動に失敗しました。');
+    }
+  };
+
+  // ---- TODOカラム並び順ヘルパ -------------------------------------
+
+  const addToTodoColumnOrder = (id: string, insertBeforeKey?: string) => {
+    const key = `assignment:${id}`;
+    setTodoColumnOrder(prev => {
+      const currentKeys = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
       if (currentKeys.includes(key)) return currentKeys;
       if (insertBeforeKey) {
         const to = currentKeys.indexOf(insertBeforeKey);
@@ -285,15 +306,9 @@ export default function TasksPage() {
     });
   };
 
-  const removeAssignmentFromTodoColumn = (id: string) => {
-    setTodoAssignmentIds(prev => {
-      if (!prev.includes(id)) return prev;
-      const next = prev.filter(x => x !== id);
-      saveTodoColumnAssignmentIds(next);
-      return next;
-    });
+  const removeFromTodoColumnOrder = (id: string) => {
+    const key = `assignment:${id}`;
     setTodoColumnOrder(prev => {
-      const key = `assignment:${id}`;
       if (!prev.includes(key)) return prev;
       const next = prev.filter(x => x !== key);
       saveTodoColumnOrder(next);
@@ -302,23 +317,6 @@ export default function TasksPage() {
   };
 
   // ---- API ハンドラ --------------------------------------------------
-
-  const setAssignmentDone = async (id: string, isDone: boolean) => {
-    const key = `assignment-done-${id}`;
-    setBusy(key, true);
-    setError('');
-    try {
-      await updateAssignmentDone(id, isDone);
-      setAssignments(prev => prev.map(a => (
-        a.id === id ? { ...a, is_done: isDone, done_at: isDone ? new Date().toISOString() : null } : a
-      )));
-    } catch (err) {
-      console.error(err);
-      setError(isDone ? '課題を完了にできませんでした。' : '課題を完了から戻せませんでした。');
-    } finally {
-      setBusy(key, false);
-    }
-  };
 
   const handleDeleteAssignment = async (id: string) => {
     const key = `assignment-delete-${id}`;
@@ -473,19 +471,21 @@ export default function TasksPage() {
 
   // 課題カラム: Todo→
   const handleMoveAssignmentToTodo = (id: string) => {
-    addAssignmentToTodoColumn(id);
+    addToTodoColumnOrder(id);
+    void moveBoardStatus(id, 'todo');
   };
 
   // 課題カラム / Todoカラム: 完了→ (課題)
   const handleMoveAssignmentToDone = (id: string) => {
     insertIntoDoneColumn(`assignment:${id}`);
-    void setAssignmentDone(id, true);
+    void moveBoardStatus(id, 'done');
   };
 
   // Todoカラム内の課題: ←課題
   const handleMoveTodoAssignmentToAssignment = (id: string) => {
-    removeAssignmentFromTodoColumn(id);
+    removeFromTodoColumnOrder(id);
     insertIntoAssignmentColumn(id);
+    void moveBoardStatus(id, 'assignment');
   };
 
   // Todoカラム: 完了→ (Todo)
@@ -496,15 +496,15 @@ export default function TasksPage() {
 
   // 完了カラムの課題: ←課題
   const handleMoveDoneAssignmentToAssignment = (id: string) => {
-    void setAssignmentDone(id, false);
-    removeAssignmentFromTodoColumn(id);
+    removeFromTodoColumnOrder(id);
     insertIntoAssignmentColumn(id);
+    void moveBoardStatus(id, 'assignment');
   };
 
   // 完了カラムの課題: ←Todo
   const handleMoveDoneAssignmentToTodo = (id: string) => {
-    void setAssignmentDone(id, false);
-    addAssignmentToTodoColumn(id);
+    addToTodoColumnOrder(id);
+    void moveBoardStatus(id, 'todo');
   };
 
   // 完了カラムのTodo: ←Todo
@@ -659,11 +659,11 @@ export default function TasksPage() {
       const { id, column: sourceColumn } = active;
 
       if (targetColumn === 'done') {
-        void setAssignmentDone(id, true);
         const insertBeforeKey = overData?.type === 'done'
           ? `${overData.doneKind as string}:${overData.id as string}`
           : undefined;
         insertIntoDoneColumn(`assignment:${id}`, insertBeforeKey);
+        void moveBoardStatus(id, 'done');
         return;
       }
 
@@ -672,7 +672,8 @@ export default function TasksPage() {
           const insertBeforeKey = (overData?.type === 'todo' || overData?.type === 'assignment')
             ? `${overData.type as string}:${overData.id as string}`
             : undefined;
-          addAssignmentToTodoColumn(id, insertBeforeKey);
+          addToTodoColumnOrder(id, insertBeforeKey);
+          void moveBoardStatus(id, 'todo');
         } else if (overData?.type === 'todo' || overData?.type === 'assignment') {
           reorderTodoColumn(`assignment:${id}`, overData);
         }
@@ -681,10 +682,11 @@ export default function TasksPage() {
 
       if (targetColumn === 'assignment') {
         if (sourceColumn === 'todo') {
-          removeAssignmentFromTodoColumn(id);
+          removeFromTodoColumnOrder(id);
           if (overData?.type === 'assignment') {
             insertIntoAssignmentColumn(id, overData.id as string);
           }
+          void moveBoardStatus(id, 'assignment');
         } else if (sourceColumn === 'assignment' && overData?.type === 'assignment' && assignmentSortMode === 'deadline-asc') {
           reorderAssignmentColumn(id, overData);
         }
@@ -722,20 +724,20 @@ export default function TasksPage() {
 
       // doneKind === 'assignment'
       if (targetColumn === 'assignment') {
-        void setAssignmentDone(id, false);
-        removeAssignmentFromTodoColumn(id);
+        removeFromTodoColumnOrder(id);
         if (overData?.type === 'assignment') {
           insertIntoAssignmentColumn(id, overData.id as string);
         }
+        void moveBoardStatus(id, 'assignment');
         return;
       }
 
       if (targetColumn === 'todo') {
-        void setAssignmentDone(id, false);
         const insertBeforeKey = (overData?.type === 'todo' || overData?.type === 'assignment')
           ? `${overData.type as string}:${overData.id as string}`
           : undefined;
-        addAssignmentToTodoColumn(id, insertBeforeKey);
+        addToTodoColumnOrder(id, insertBeforeKey);
+        void moveBoardStatus(id, 'todo');
         return;
       }
 
@@ -905,7 +907,9 @@ export default function TasksPage() {
               systemTypes={lmsSystemTypes}
               busyKeys={busyKeys}
               assignmentSortMode={assignmentSortMode}
+              assignmentFilterMode={assignmentFilterMode}
               onAssignmentSortModeChange={handleAssignmentSortChange}
+              onAssignmentFilterModeChange={handleAssignmentFilterChange}
               onTodoViewModeChange={handleTodoViewModeChange}
               onCreateTodo={title => void handleCreateTodoWithTitle(title)}
               onCreateTodoBelow={handleCreateTodoBelow}

@@ -14,6 +14,8 @@ export type Assignment = {
   source_url: string | null;
   is_due_estimated: boolean;
   lms_course_id: string | null;
+  is_active_url: boolean;
+  board_status: 'assignment' | 'todo' | 'done';
   is_done: boolean;
   done_at: string | null;
   created_at: string;
@@ -46,6 +48,18 @@ export async function updateAssignmentDone(id: string, isDone: boolean): Promise
     body: JSON.stringify({ is_done: isDone }),
   });
   if (!res.ok) throw new Error('課題の更新に失敗しました');
+}
+
+export async function updateAssignmentBoardStatus(
+  id: string,
+  boardStatus: 'assignment' | 'todo' | 'done',
+): Promise<void> {
+  const res = await authFetch(`/api/assignments/${id}/board-status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ board_status: boardStatus }),
+  });
+  if (!res.ok) throw new Error('課題の移動に失敗しました');
 }
 
 export async function updateAssignmentTitle(id: string, taskName: string): Promise<void> {

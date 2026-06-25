@@ -3,6 +3,7 @@ export interface ParsedLmsContent {
   name: string
   kind: string | null
   sourceUrl: string | null
+  isActiveUrl: boolean
   rawText: string | null
   folderId: string
   folderName: string
@@ -36,11 +37,13 @@ export function parseLmsCoursePage(html: string): ParsedLmsCourse | null {
     folder.querySelectorAll('[data-contents-id]').forEach(item => {
       const kindText = item.querySelector('.cl-contentsList_categoryLabel')?.textContent?.trim()
       const link = item.querySelector('a') as HTMLAnchorElement | null
+      const href = link?.getAttribute('href') || null
       contents.push({
         id: item.getAttribute('data-contents-id') || null,
         name: item.getAttribute('data-contents-name') ?? '',
         kind: kindText || null,
-        sourceUrl: link?.getAttribute('href') || null,
+        sourceUrl: href,
+        isActiveUrl: href !== null && href !== '',
         rawText: item.textContent?.trim() || null,
         folderId,
         folderName,

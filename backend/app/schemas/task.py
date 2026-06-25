@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -45,6 +45,8 @@ class AssignmentPublic(BaseModel):
     availability_end: Optional[str]
     source_url: Optional[str]
     is_due_estimated: bool
+    is_active_url: bool
+    board_status: Literal['assignment', 'todo', 'done']
     lms_course_id: Optional[str]
     is_done: bool
     done_at: Optional[datetime]
@@ -65,6 +67,10 @@ class UpdateAssignmentDone(BaseModel):
 
 class UpdateAssignmentTitle(BaseModel):
     task_name: str
+
+
+class UpdateAssignmentBoardStatus(BaseModel):
+    board_status: Literal['assignment', 'todo', 'done']
 
 
 class ImportAssignmentItem(BaseModel):
@@ -90,6 +96,7 @@ class ImportLmsTaskItem(BaseModel):
     available_from: Optional[str] = None
     available_until: Optional[str] = None
     raw_text: Optional[str] = None
+    is_active_url: bool = False
 
 
 class ImportLmsTasksPayload(BaseModel):

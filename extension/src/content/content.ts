@@ -1136,6 +1136,7 @@ function initOnDomReady() {
             available_from: formatUnixTs(c.startDate),
             available_until: formatUnixTs(c.endDate),
             raw_text: c.rawText,
+            is_active_url: c.isActiveUrl,
           }))
       }
 

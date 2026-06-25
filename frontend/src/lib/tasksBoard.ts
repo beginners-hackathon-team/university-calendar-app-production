@@ -12,6 +12,9 @@ export type DoneItem =
 // 課題カラムの並び替えは要件どおり「期限が近い順」「授業別」の2種のみ。
 export type AssignmentSortMode = 'deadline-asc' | 'course';
 
+// 課題カラムの期限フィルタ。
+export type AssignmentFilterMode = 'week' | 'all';
+
 export type AssignmentGroup = {
   label: string;
   items: Assignment[];
@@ -44,11 +47,11 @@ export const columnLabels: Record<ColumnKey, string> = {
 // ---- localStorage キー ----------------------------------------------
 
 const ASSIGNMENT_SORT_KEY = 'ku-assignment-sort-mode';
+const ASSIGNMENT_FILTER_KEY = 'ku-assignment-filter-mode';
+const TODO_COLUMN_ORDER_KEY = 'ku-todo-column-order';
 const BOARD_VISIBLE_KEY = 'ku-board-visible';
 const BOARD_ORDER_KEY = 'ku-board-order';
 const COLUMN_SHARES_KEY = 'ku-board-shares';
-const TODO_COLUMN_ORDER_KEY = 'ku-todo-column-order';
-const TODO_COLUMN_ASSIGNMENTS_KEY = 'ku-todo-column-assignments';
 const TODO_VIEW_MODE_KEY = 'ku-todo-view-mode';
 const MOBILE_TAB_KEY = 'ku-mobile-tab';
 
@@ -240,6 +243,37 @@ export function saveAssignmentSortMode(mode: AssignmentSortMode): void {
   }
 }
 
+function isAssignmentFilterMode(v: string | null): v is AssignmentFilterMode {
+  return v === 'week' || v === 'all';
+}
+
+export function loadAssignmentFilterMode(): AssignmentFilterMode {
+  try {
+    const saved = localStorage.getItem(ASSIGNMENT_FILTER_KEY);
+    return isAssignmentFilterMode(saved) ? saved : 'week';
+  } catch {
+    return 'week';
+  }
+}
+
+export function saveAssignmentFilterMode(mode: AssignmentFilterMode): void {
+  try {
+    localStorage.setItem(ASSIGNMENT_FILTER_KEY, mode);
+  } catch { /* 無視 */ }
+}
+
+const FILTER_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function filterAssignmentsByDeadline(assignments: Assignment[], mode: AssignmentFilterMode): Assignment[] {
+  if (mode === 'all') return assignments;
+  const now = Date.now();
+  return assignments.filter(a => {
+    const end = parseTaskDate(a.availability_end);
+    if (end === null) return false;
+    return end - now <= FILTER_WEEK_MS;
+  });
+}
+
 export function loadBoardVisible(): BoardVisible {
   try {
     const raw = localStorage.getItem(BOARD_VISIBLE_KEY);
@@ -307,26 +341,6 @@ export function loadTodoColumnOrder(): string[] {
 export function saveTodoColumnOrder(order: string[]): void {
   try {
     localStorage.setItem(TODO_COLUMN_ORDER_KEY, JSON.stringify(order));
-  } catch {
-    // 無視
-  }
-}
-
-// TODOカラムへユーザーが送った課題のID一覧（自動移動はせず、すべて手動操作で管理する）。
-export function loadTodoColumnAssignmentIds(): string[] {
-  try {
-    const raw = localStorage.getItem(TODO_COLUMN_ASSIGNMENTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveTodoColumnAssignmentIds(ids: string[]): void {
-  try {
-    localStorage.setItem(TODO_COLUMN_ASSIGNMENTS_KEY, JSON.stringify(ids));
   } catch {
     // 無視
   }

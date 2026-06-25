@@ -24,6 +24,7 @@ export interface ImportLmsTaskItem {
   available_from: string | null  // "2026/06/29 20:01"
   available_until: string | null // "2026/07/06 20:00"
   raw_text: string | null
+  is_active_url: boolean
 }
 
 export interface ImportLmsTasksMessage {

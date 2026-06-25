@@ -54,7 +54,7 @@ export default function Layout() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const isSmallScreen = useIsMobile(768);
   const isHandheld = isSmallScreen || /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent);
-  const showExtensionNotice = extensionInstalled === false && !bannerDismissed;
+  const showExtensionNotice = extensionInstalled === "not_installed" && !bannerDismissed;
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [homePath, setHomePath] = useState(

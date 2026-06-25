@@ -48,6 +48,8 @@ class Task(Base):
     result: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     score: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_due_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active_url: Mapped[bool] = mapped_column(Boolean, default=False)
+    board_status: Mapped[str] = mapped_column(String, nullable=False, default='assignment')
 
     @property
     def task_name(self) -> str:

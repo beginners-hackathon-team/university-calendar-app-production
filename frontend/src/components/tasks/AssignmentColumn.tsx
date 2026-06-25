@@ -6,6 +6,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Assignment } from '../../api/tasks';
 import {
   type AssignmentSortMode,
+  type AssignmentFilterMode,
   assignmentSortOptions,
   buildAssignmentHref,
   formatCourseName,
@@ -17,6 +18,7 @@ import { ColumnHeader, ColumnShell, EmptyState, GhostCard, getTextRowStyle } fro
 type Props = {
   assignments: Assignment[];
   sortMode: AssignmentSortMode;
+  filterMode: AssignmentFilterMode;
   systemTypes: Record<string, string | null>;
   isMobile?: boolean;
   setNodeRef: (node: HTMLElement | null) => void;
@@ -27,6 +29,7 @@ type Props = {
   ghostBeforeKey?: string | null;
   activeDragLabel?: string | null;
   onSortModeChange: (mode: AssignmentSortMode) => void;
+  onFilterModeChange: (mode: AssignmentFilterMode) => void;
   onChangeTitle: (id: string, taskName: string) => void;
   onMoveToTodo: (id: string) => void;
   onMoveToDone: (id: string) => void;
@@ -35,6 +38,7 @@ type Props = {
 export default function AssignmentColumn({
   assignments,
   sortMode,
+  filterMode,
   systemTypes,
   isMobile,
   setNodeRef,
@@ -45,6 +49,7 @@ export default function AssignmentColumn({
   ghostBeforeKey,
   activeDragLabel,
   onSortModeChange,
+  onFilterModeChange,
   onChangeTitle,
   onMoveToTodo,
   onMoveToDone,
@@ -59,24 +64,57 @@ export default function AssignmentColumn({
         gripRef={gripRef}
         gripProps={gripProps}
         right={
-          <select
-            value={sortMode}
-            onChange={e => onSortModeChange(e.target.value as AssignmentSortMode)}
-            aria-label="課題の並び"
-            className="ku-input text-[12px] font-medium"
-            style={{
-              padding: '5px 8px',
-              borderRadius: 'var(--r-input)',
-              border: '1.5px solid var(--c-border)',
-              color: 'var(--c-text-1)',
-              background: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            {assignmentSortOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* 期限フィルタ */}
+            <div
+              style={{
+                display: 'flex',
+                background: 'var(--c-bg-2, #F4F4F4)',
+                borderRadius: 7,
+                padding: 2,
+                gap: 2,
+              }}
+            >
+              {(['week', 'all'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => onFilterModeChange(mode)}
+                  className="text-[11px] font-semibold"
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 5,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: filterMode === mode ? '#fff' : 'transparent',
+                    color: filterMode === mode ? 'var(--c-text-1)' : 'var(--c-text-3)',
+                    boxShadow: filterMode === mode ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+                    transition: 'all 0.1s',
+                  }}
+                >
+                  {mode === 'week' ? '1週間' : 'すべて'}
+                </button>
+              ))}
+            </div>
+            {/* 並び順 */}
+            <select
+              value={sortMode}
+              onChange={e => onSortModeChange(e.target.value as AssignmentSortMode)}
+              aria-label="課題の並び"
+              className="ku-input text-[12px] font-medium"
+              style={{
+                padding: '5px 8px',
+                borderRadius: 'var(--r-input)',
+                border: '1.5px solid var(--c-border)',
+                color: 'var(--c-text-1)',
+                background: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              {assignmentSortOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         }
       />
 
@@ -279,6 +317,7 @@ function AssignmentListItem({
   };
 
   const lmsHref = buildAssignmentHref(assignment, systemTypes);
+  const isClickable = !!lmsHref && assignment.is_active_url;
   const deadline = formatRemainingDeadline(assignment.availability_end);
   const courseName = formatCourseName(assignment.course_name);
 
@@ -312,9 +351,9 @@ function AssignmentListItem({
         <div />
         <div style={{ minWidth: 0 }}>
           <div className="text-[12px]" style={{ marginBottom: 1 }}>
-            {lmsHref ? (
+            {isClickable ? (
               <a
-                href={lmsHref}
+                href={lmsHref!}
                 target="webclass"
                 rel="noopener noreferrer"
                 onPointerDown={e => e.stopPropagation()}
