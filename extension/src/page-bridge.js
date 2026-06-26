@@ -5,7 +5,7 @@ console.log('[extension/page-bridge] loaded')
 // postMessage で受け取って実行する。
 window.addEventListener('message', (event) => {
   if (event.source !== window) return
-  if (!event.data || event.data.type !== 'KU_CALENDAR_RUN_POSTBACK') return
+  if (!event.data || event.data.type !== 'KU_TASKS_RUN_POSTBACK') return
 
   console.log('[extension/page-bridge] message受信:', event.data)
 

@@ -794,7 +794,7 @@ function ensurePageBridgeInjected(): Promise<void> {
   if (bridgeReadyPromise) return bridgeReadyPromise
   bridgeReadyPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script')
-    script.id = 'ku-calendar-page-bridge'
+    script.id = 'ku-tasks-page-bridge'
     script.src = chrome.runtime.getURL('page-bridge.js')
     console.log('[extension] page-bridge: script要素を注入, src=', script.src)
     script.onload = () => {
@@ -813,7 +813,7 @@ function ensurePageBridgeInjected(): Promise<void> {
 function runPostBackInPage(eventTarget: string, eventArgument = ''): void {
   void ensurePageBridgeInjected().then(() => {
     console.log('[extension] postMessage送信: target=', eventTarget, 'argument=', eventArgument)
-    window.postMessage({ type: 'KU_CALENDAR_RUN_POSTBACK', eventTarget, eventArgument }, '*')
+    window.postMessage({ type: 'KU_TASKS_RUN_POSTBACK', eventTarget, eventArgument }, '*')
   }).catch(e => {
     console.error('[extension] page-bridge 読み込みエラー:', e)
   })

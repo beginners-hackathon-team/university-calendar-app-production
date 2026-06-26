@@ -4,8 +4,15 @@
 import { ACANTHUS_HOST, LMS_HOST } from '../shared/urls'
 
 // インストール済みであることを Web アプリに通知
-console.log('[ku-calendar-extension] appContent injected, sending EXTENSION_INSTALLED')
-window.postMessage({ source: 'ku-calendar-extension', type: 'EXTENSION_INSTALLED' }, '*')
+console.log('[ku-tasks-extension] appContent injected, sending EXTENSION_INSTALLED')
+window.postMessage({ source: 'ku-tasks-extension', type: 'EXTENSION_INSTALLED' }, '*')
+
+// Web アプリ側が先にマウントされていなかった場合に備え、ping にも応答する
+window.addEventListener('message', (e) => {
+  if (e.source === window && e.data?.type === 'KU_TASKS_PING') {
+    window.postMessage({ source: 'ku-tasks-extension', type: 'EXTENSION_INSTALLED' }, '*')
+  }
+})
 
 const QUARTER_MAP: Record<string, number> = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 }
 
