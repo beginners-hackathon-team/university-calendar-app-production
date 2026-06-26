@@ -3,7 +3,10 @@
   "name": "KU-tasks同期",
   "version": "1.0.3",
   "description": "金沢大学ポータルとWebClass LMSから履修情報・課題情報を取得し、KU-tasksに同期します。",
-  "permissions": ["storage", "tabs"],
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",
@@ -20,17 +23,20 @@
   "host_permissions": [
     "https://eduweb.sta.kanazawa-u.ac.jp/*",
     "https://lms-wc.el.kanazawa-u.ac.jp/*",
-    "https://ku-calendar-app.onrender.com/*",
-    "https://lzpofmjgptzfjhkiqbqp.supabase.co/*",
-    "http://localhost:5173/*"
+    "https://ku-tasks-app.onrender.com/*",
+    "https://lzpofmjgptzfjhkiqbqp.supabase.co/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "web_accessible_resources": [
     {
-      "resources": ["page-bridge.js"],
-      "matches": ["https://eduweb.sta.kanazawa-u.ac.jp/*"]
+      "resources": [
+        "page-bridge.js"
+      ],
+      "matches": [
+        "https://eduweb.sta.kanazawa-u.ac.jp/*"
+      ]
     }
   ],
   "content_scripts": [
@@ -41,15 +47,18 @@
         "https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Blank.aspx*",
         "https://lms-wc.el.kanazawa-u.ac.jp/webclass/course.php/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     },
     {
       "matches": [
-        "https://ku-calendar-app.onrender.com/*",
-        "http://localhost:5173/*"
+        "https://ku-tasks-app.onrender.com/*"
       ],
-      "js": ["appContent.js"]
+      "js": [
+        "appContent.js"
+      ]
     }
   ]
 }

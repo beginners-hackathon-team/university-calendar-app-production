@@ -32,7 +32,7 @@
 
 収集した情報は、以下のサーバーに送信されます。
 
-- **送信先URL**: `https://ku-calendar-app.onrender.com`
+- **送信先URL**: `https://ku-tasks-app.onrender.com`
 - **送信タイミング**: ユーザーが拡張機能のボタン（「履修情報を取得」「全Qを取得」「LMS情報を取得」）を押したときのみ
 - **認証トークンの扱い**: 端末内の `chrome.storage.local` にのみ保存され、外部サーバーには送信されません
 
