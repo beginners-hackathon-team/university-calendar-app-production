@@ -22,23 +22,23 @@ def upgrade() -> None:
 
     # ローカル環境（素のPostgreSQL）向け: auth スキーマと auth.users を作成
     # 本番 Supabase では既に存在するため IF NOT EXISTS でスキップされる
-    op.execute('CREATE SCHEMA IF NOT EXISTS auth')
-    op.execute('''
-        CREATE TABLE IF NOT EXISTS auth.users (
-            id UUID PRIMARY KEY
-        )
-    ''')
+    # op.execute('CREATE SCHEMA IF NOT EXISTS auth')
+    # op.execute('''
+    #     CREATE TABLE IF NOT EXISTS auth.users (
+    #         id UUID PRIMARY KEY
+    #     )
+    # ''')
 
     # profiles.user_id を VARCHAR → UUID に変換
     # UUID に変換できない値が存在する場合はここで失敗して停止する
     op.execute('ALTER TABLE profiles ALTER COLUMN user_id TYPE UUID USING user_id::uuid')
 
     # profiles の既存 user_id を auth.users に補完してから FK を張る
-    op.execute('''
-        INSERT INTO auth.users (id)
-        SELECT user_id FROM profiles
-        WHERE user_id NOT IN (SELECT id FROM auth.users)
-    ''')
+    # op.execute('''
+    #     INSERT INTO auth.users (id)
+    #     SELECT user_id FROM profiles
+    #     WHERE user_id NOT IN (SELECT id FROM auth.users)
+    # ''')
 
     # profiles.user_id → auth.users(id) FK
     op.execute('''
