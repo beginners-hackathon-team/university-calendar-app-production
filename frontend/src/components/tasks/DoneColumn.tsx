@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type DoneItem, buildAssignmentHref, formatCourseName, formatDateTime } from '../../lib/tasksBoard';
@@ -25,7 +25,7 @@ type Props = {
   onChangeAssignmentTitle: (id: string, taskName: string) => void;
 };
 
-export default function DoneColumn({
+export default memo(function DoneColumn({
   items,
   systemTypes,
   busyKeys,
@@ -76,10 +76,12 @@ export default function DoneColumn({
                           ? busyKeys.has(`todo-toggle-${item.data.id}`) || busyKeys.has(`todo-delete-${item.data.id}`)
                           : busyKeys.has(`assignment-delete-${item.data.id}`) || busyKeys.has(`assignment-done-${item.data.id}`)
                       }
-                      onDelete={() => (item.kind === 'todo' ? onDeleteTodo(item.data.id) : onDeleteAssignment(item.data.id))}
-                      onMoveToAssignment={item.kind === 'assignment' ? () => onMoveAssignmentToAssignment(item.data.id) : undefined}
-                      onMoveToTodo={item.kind === 'assignment' ? () => onMoveAssignmentToTodo(item.data.id) : () => onMoveTodoToTodo(item.data.id)}
-                      onChangeTitle={item.kind === 'assignment' ? (title: string) => onChangeAssignmentTitle(item.data.id, title) : undefined}
+                      onDeleteTodo={onDeleteTodo}
+                      onDeleteAssignment={onDeleteAssignment}
+                      onMoveAssignmentToAssignment={onMoveAssignmentToAssignment}
+                      onMoveAssignmentToTodo={onMoveAssignmentToTodo}
+                      onMoveTodoToTodo={onMoveTodoToTodo}
+                      onChangeAssignmentTitle={onChangeAssignmentTitle}
                     />
                   </Fragment>
                 );
@@ -91,27 +93,51 @@ export default function DoneColumn({
       </div>
     </ColumnShell>
   );
-}
+});
 
-function DoneCard({
+const DoneCard = memo(function DoneCard({
   item,
   systemTypes,
   isMobile,
   busy,
-  onDelete,
-  onMoveToAssignment,
-  onMoveToTodo,
-  onChangeTitle,
+  onDeleteTodo,
+  onDeleteAssignment,
+  onMoveAssignmentToAssignment,
+  onMoveAssignmentToTodo,
+  onMoveTodoToTodo,
+  onChangeAssignmentTitle,
 }: {
   item: DoneItem;
   systemTypes: Record<string, string | null>;
   isMobile?: boolean;
   busy: boolean;
-  onDelete: () => void;
-  onMoveToAssignment?: () => void;
-  onMoveToTodo: () => void;
-  onChangeTitle?: (title: string) => void;
+  onDeleteTodo: (id: string) => void;
+  onDeleteAssignment: (id: string) => void;
+  onMoveAssignmentToAssignment: (id: string) => void;
+  onMoveAssignmentToTodo: (id: string) => void;
+  onMoveTodoToTodo: (id: string) => void;
+  onChangeAssignmentTitle: (id: string, taskName: string) => void;
 }) {
+  const id = item.data.id;
+  const kind = item.kind;
+
+  const onDelete = useCallback(() => {
+    if (kind === 'todo') onDeleteTodo(id);
+    else onDeleteAssignment(id);
+  }, [kind, id, onDeleteTodo, onDeleteAssignment]);
+
+  const onMoveToAssignment = useCallback(() => {
+    onMoveAssignmentToAssignment(id);
+  }, [id, onMoveAssignmentToAssignment]);
+
+  const onMoveToTodo = useCallback(() => {
+    if (kind === 'assignment') onMoveAssignmentToTodo(id);
+    else onMoveTodoToTodo(id);
+  }, [kind, id, onMoveAssignmentToTodo, onMoveTodoToTodo]);
+
+  const onChangeTitle = kind === 'assignment'
+    ? (title: string) => onChangeAssignmentTitle(id, title)
+    : undefined;
   const { attributes, listeners, setNodeRef, isDragging, transform, transition } = useSortable({
     id: `done:${item.kind}:${item.data.id}`,
     data: { type: 'done', column: 'done', doneKind: item.kind, id: item.data.id },
@@ -283,7 +309,7 @@ function DoneCard({
                 transition: 'opacity 0.12s',
               }}
             >
-              {onMoveToAssignment && (
+              {kind === 'assignment' && (
                 <DoneActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToAssignment}>←課題</DoneActionButton>
               )}
               <DoneActionButton onPointerDown={e => e.stopPropagation()} onClick={onMoveToTodo}>←Todo</DoneActionButton>
@@ -299,7 +325,7 @@ function DoneCard({
           onClick={e => e.stopPropagation()}
           onPointerDown={e => e.stopPropagation()}
         >
-          {onMoveToAssignment && (
+          {kind === 'assignment' && (
             <MobileMenuItem
               onPointerDown={e => e.stopPropagation()}
               onClick={() => { onMoveToAssignment(); setExpanded(false); }}
@@ -326,7 +352,7 @@ function DoneCard({
       )}
     </div>
   );
-}
+});
 
 function DoneActionButton({
   children,

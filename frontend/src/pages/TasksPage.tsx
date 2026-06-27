@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
   DndContext,
@@ -138,14 +138,15 @@ export default function TasksPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const setBusy = (key: string, busy: boolean) => {
+  const setBusy = useCallback((key: string, busy: boolean) => {
     setBusyKeys(prev => {
       const next = new Set(prev);
       if (busy) next.add(key);
       else next.delete(key);
+      busyKeysRef.current = next;
       return next;
     });
-  };
+  }, []);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -225,29 +226,29 @@ export default function TasksPage() {
     done: columnShares.done ?? DEFAULT_COLUMN_SHARE,
   }), [columnShares]);
 
-  const handleResizeColumns = (a: ColumnKey, b: ColumnKey, shareA: number, shareB: number) => {
+  const handleResizeColumns = useCallback((a: ColumnKey, b: ColumnKey, shareA: number, shareB: number) => {
     setColumnShares(prev => {
       const next = { ...prev, [a]: shareA, [b]: shareB };
       saveColumnShares(next);
       return next;
     });
-  };
+  }, []);
 
   // ---- 永続化付き setter --------------------------------------------
 
-  const handleAssignmentSortChange = (mode: AssignmentSortMode) => {
+  const handleAssignmentSortChange = useCallback((mode: AssignmentSortMode) => {
     setAssignmentSortMode(mode);
     saveAssignmentSortMode(mode);
     setAssignmentColumnOrder([]);
     saveAssignmentColumnOrder([]);
-  };
+  }, []);
 
-  const handleAssignmentFilterChange = (mode: AssignmentFilterMode) => {
+  const handleAssignmentFilterChange = useCallback((mode: AssignmentFilterMode) => {
     setAssignmentFilterMode(mode);
     saveAssignmentFilterMode(mode);
-  };
+  }, []);
 
-  const toggleColumn = (key: ColumnKey) => {
+  const toggleColumn = useCallback((key: ColumnKey) => {
     setVisible(prev => {
       const next = { ...prev, [key]: !prev[key] };
       saveBoardVisible(next);
@@ -256,17 +257,17 @@ export default function TasksPage() {
     // 表示列が変わるたびに幅は等分へリセットする（例: 課題を消したら TODO 左半分・完了 右半分になる）。
     setColumnShares({});
     saveColumnShares({});
-  };
+  }, []);
 
-  const handleTodoViewModeChange = (mode: TodoViewMode) => {
+  const handleTodoViewModeChange = useCallback((mode: TodoViewMode) => {
     setTodoViewMode(mode);
     saveTodoViewMode(mode);
-  };
+  }, []);
 
   // ---- board_status API（楽観更新付き） ----------------------------
 
-  const moveBoardStatus = async (id: string, status: 'assignment' | 'todo' | 'done') => {
-    const snapshot = assignments.find(a => a.id === id);
+  const moveBoardStatus = useCallback(async (id: string, status: 'assignment' | 'todo' | 'done') => {
+    const snapshot = assignmentsRef.current.find(a => a.id === id);
     if (!snapshot) return;
     const now = new Date().toISOString();
     setAssignments(prev => prev.map(a => a.id === id ? {
@@ -282,11 +283,11 @@ export default function TasksPage() {
       setAssignments(prev => prev.map(a => a.id === id ? snapshot : a));
       setError('課題の移動に失敗しました。');
     }
-  };
+  }, []);
 
   // ---- TODOカラム並び順ヘルパ -------------------------------------
 
-  const addToTodoColumnOrder = (id: string, insertBeforeKey?: string) => {
+  const addToTodoColumnOrder = useCallback((id: string, insertBeforeKey?: string) => {
     const key = `assignment:${id}`;
     setTodoColumnOrder(prev => {
       const currentKeys = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
@@ -304,9 +305,9 @@ export default function TasksPage() {
       saveTodoColumnOrder(next);
       return next;
     });
-  };
+  }, []);
 
-  const removeFromTodoColumnOrder = (id: string) => {
+  const removeFromTodoColumnOrder = useCallback((id: string) => {
     const key = `assignment:${id}`;
     setTodoColumnOrder(prev => {
       if (!prev.includes(key)) return prev;
@@ -314,11 +315,11 @@ export default function TasksPage() {
       saveTodoColumnOrder(next);
       return next;
     });
-  };
+  }, []);
 
   // ---- API ハンドラ --------------------------------------------------
 
-  const handleDeleteAssignment = async (id: string) => {
+  const handleDeleteAssignment = useCallback(async (id: string) => {
     const key = `assignment-delete-${id}`;
     setBusy(key, true);
     setError('');
@@ -331,10 +332,10 @@ export default function TasksPage() {
     } finally {
       setBusy(key, false);
     }
-  };
+  }, [setBusy]);
 
-  const handleCreateTodoWithTitle = async (title: string) => {
-    if (busyKeys.has('todo-create')) return;
+  const handleCreateTodoWithTitle = useCallback(async (title: string) => {
+    if (busyKeysRef.current.has('todo-create')) return;
     setBusy('todo-create', true);
     setError('');
     try {
@@ -351,10 +352,10 @@ export default function TasksPage() {
     } finally {
       setBusy('todo-create', false);
     }
-  };
+  }, [setBusy]);
 
-  const handleCreateTodoBelow = async (afterId: string | null): Promise<string | undefined> => {
-    if (busyKeys.has('todo-create')) return undefined;
+  const handleCreateTodoBelow = useCallback(async (afterId: string | null): Promise<string | undefined> => {
+    if (busyKeysRef.current.has('todo-create')) return undefined;
     setBusy('todo-create', true);
     setError('');
     try {
@@ -379,11 +380,11 @@ export default function TasksPage() {
     } finally {
       setBusy('todo-create', false);
     }
-  };
+  }, [setBusy]);
 
   // 課題ブロックの授業名行でEnterしたときなど、指定したブロックの直前に新しいTodoを作る。
-  const handleCreateTodoBefore = async (beforeId: string): Promise<string | undefined> => {
-    if (busyKeys.has('todo-create')) return undefined;
+  const handleCreateTodoBefore = useCallback(async (beforeId: string): Promise<string | undefined> => {
+    if (busyKeysRef.current.has('todo-create')) return undefined;
     setBusy('todo-create', true);
     setError('');
     try {
@@ -408,9 +409,9 @@ export default function TasksPage() {
     } finally {
       setBusy('todo-create', false);
     }
-  };
+  }, [setBusy]);
 
-  const handleChangeTodoTitle = async (id: string, title: string) => {
+  const handleChangeTodoTitle = useCallback(async (id: string, title: string) => {
     // 楽観更新（即時にローカル反映、その後サーバー保存）。
     setTodos(prev => prev.map(t => (t.id === id ? { ...t, title } : t)));
     try {
@@ -419,9 +420,9 @@ export default function TasksPage() {
       console.error(err);
       setError('TODOを保存できませんでした。');
     }
-  };
+  }, []);
 
-  const handleChangeAssignmentTitle = async (id: string, taskName: string) => {
+  const handleChangeAssignmentTitle = useCallback(async (id: string, taskName: string) => {
     // 楽観更新（即時にローカル反映、その後サーバー保存）。課題名以外（授業名・期限など）は変更不可。
     setAssignments(prev => prev.map(a => (a.id === id ? { ...a, task_name: taskName } : a)));
     try {
@@ -430,9 +431,9 @@ export default function TasksPage() {
       console.error(err);
       setError('課題名を保存できませんでした。');
     }
-  };
+  }, []);
 
-  const handleToggleTodoDone = async (id: string, done: boolean) => {
+  const handleToggleTodoDone = useCallback(async (id: string, done: boolean) => {
     const key = `todo-toggle-${id}`;
     setBusy(key, true);
     setError('');
@@ -445,17 +446,17 @@ export default function TasksPage() {
     } finally {
       setBusy(key, false);
     }
-  };
+  }, [setBusy]);
 
-  const handleDeleteTodo = async (id: string) => {
-    const key = `todo-delete-${id}`;
-    setBusy(key, true);
+  const handleDeleteTodo = useCallback(async (id: string) => {
+    const busyKey = `todo-delete-${id}`;
+    setBusy(busyKey, true);
     setError('');
     try {
       await deleteTodo(id);
       setTodos(prev => prev.filter(t => t.id !== id));
       setTodoColumnOrder(prev => {
-        const next = prev.filter(key => key !== `todo:${id}`);
+        const next = prev.filter(k => k !== `todo:${id}`);
         saveTodoColumnOrder(next);
         return next;
       });
@@ -463,59 +464,66 @@ export default function TasksPage() {
       console.error(err);
       setError('TODOを削除できませんでした。');
     } finally {
-      setBusy(key, false);
+      setBusy(busyKey, false);
     }
-  };
+  }, [setBusy]);
 
   // ---- ボタン操作ハンドラ --------------------------------------------
 
   // 課題カラム: Todo→
-  const handleMoveAssignmentToTodo = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveAssignmentToTodo = useCallback((id: string) => {
     addToTodoColumnOrder(id);
     void moveBoardStatus(id, 'todo');
-  };
+  }, []);
 
   // 課題カラム / Todoカラム: 完了→ (課題)
-  const handleMoveAssignmentToDone = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveAssignmentToDone = useCallback((id: string) => {
     insertIntoDoneColumn(`assignment:${id}`);
     void moveBoardStatus(id, 'done');
-  };
+  }, []);
 
   // Todoカラム内の課題: ←課題
-  const handleMoveTodoAssignmentToAssignment = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveTodoAssignmentToAssignment = useCallback((id: string) => {
     removeFromTodoColumnOrder(id);
     insertIntoAssignmentColumn(id);
     void moveBoardStatus(id, 'assignment');
-  };
+  }, []);
 
   // Todoカラム: 完了→ (Todo)
-  const handleMoveTodoToDone = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveTodoToDone = useCallback((id: string) => {
     insertIntoDoneColumn(`todo:${id}`);
     void handleToggleTodoDone(id, true);
-  };
+  }, []);
 
   // 完了カラムの課題: ←課題
-  const handleMoveDoneAssignmentToAssignment = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveDoneAssignmentToAssignment = useCallback((id: string) => {
     removeFromTodoColumnOrder(id);
     insertIntoAssignmentColumn(id);
     void moveBoardStatus(id, 'assignment');
-  };
+  }, []);
 
   // 完了カラムの課題: ←Todo
-  const handleMoveDoneAssignmentToTodo = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveDoneAssignmentToTodo = useCallback((id: string) => {
     addToTodoColumnOrder(id);
     void moveBoardStatus(id, 'todo');
-  };
+  }, []);
 
   // 完了カラムのTodo: ←Todo
-  const handleMoveDoneTodoToTodo = (id: string) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleMoveDoneTodoToTodo = useCallback((id: string) => {
     void handleToggleTodoDone(id, false);
-  };
+  }, []);
 
   // ---- DnD ----------------------------------------------------------
 
   // 課題カラム内の並び替え（deadline-asc モードのみ永続化）。
-  const reorderAssignmentColumn = (activeId: string, overData: Record<string, unknown> | undefined) => {
+  const reorderAssignmentColumn = useCallback((activeId: string, overData: Record<string, unknown> | undefined) => {
     const overId = overData?.id as string | undefined;
     if (!overId || activeId === overId) return;
     const ids = assignmentColumnItemsRef.current.map(a => a.id);
@@ -525,10 +533,10 @@ export default function TasksPage() {
     const next = arrayMove(ids, from, to);
     setAssignmentColumnOrder(next);
     saveAssignmentColumnOrder(next);
-  };
+  }, []);
 
   // 課題カラムへの位置指定挿入（他カラムから戻ってきたとき）。
-  const insertIntoAssignmentColumn = (id: string, insertBeforeId?: string) => {
+  const insertIntoAssignmentColumn = useCallback((id: string, insertBeforeId?: string) => {
     const currentIds = assignmentColumnItemsRef.current.map(a => a.id);
     if (insertBeforeId) {
       const to = currentIds.indexOf(insertBeforeId);
@@ -543,10 +551,10 @@ export default function TasksPage() {
     const next = [...currentIds, id];
     setAssignmentColumnOrder(next);
     saveAssignmentColumnOrder(next);
-  };
+  }, []);
 
   // 完了カラム内の並び替え。
-  const reorderDoneColumn = (activeKey: string, overData: Record<string, unknown> | undefined) => {
+  const reorderDoneColumn = useCallback((activeKey: string, overData: Record<string, unknown> | undefined) => {
     const overDoneKind = overData?.doneKind as string | undefined;
     const overId = overData?.id as string | undefined;
     if (!overDoneKind || !overId) return;
@@ -559,10 +567,10 @@ export default function TasksPage() {
     const next = arrayMove(keys, from, to);
     setDoneColumnOrder(next);
     saveDoneColumnOrder(next);
-  };
+  }, []);
 
   // 完了カラムへの位置指定挿入（他カラムから来たとき）。
-  const insertIntoDoneColumn = (newKey: string, insertBeforeKey?: string) => {
+  const insertIntoDoneColumn = useCallback((newKey: string, insertBeforeKey?: string) => {
     const currentKeys = doneColumnItemsRef.current.map(doneColumnItemKey);
     if (insertBeforeKey) {
       const to = currentKeys.indexOf(insertBeforeKey);
@@ -577,9 +585,9 @@ export default function TasksPage() {
     const next = [...currentKeys, newKey];
     setDoneColumnOrder(next);
     saveDoneColumnOrder(next);
-  };
+  }, []);
 
-  const reorderTodoColumn = (activeKey: string, overData: Record<string, unknown> | undefined) => {
+  const reorderTodoColumn = useCallback((activeKey: string, overData: Record<string, unknown> | undefined) => {
     const overType = overData?.type as 'todo' | 'assignment' | undefined;
     const overId = overData?.id as string | undefined;
     if (!overType || !overId) return;
@@ -592,17 +600,45 @@ export default function TasksPage() {
     const next = arrayMove(keys, from, to);
     setTodoColumnOrder(next);
     saveTodoColumnOrder(next);
-  };
+  }, []);
 
-  const handleDragStart = (event: DragStartEvent) => {
+  // assignments の最新値を useCallback 内から参照するための ref（moveBoardStatus の snapshot 用）。
+  const assignmentsRef = useRef(assignments);
+  assignmentsRef.current = assignments;
+  // busyKeys の最新値を useCallback 内から参照するための ref（todo-create の二重送信防止用）。
+  const busyKeysRef = useRef<Set<string>>(new Set());
+  // assignmentSortMode の最新値を handleDragEnd の useCallback 内から参照するための ref。
+  const assignmentSortModeRef = useRef<AssignmentSortMode>(assignmentSortMode);
+  assignmentSortModeRef.current = assignmentSortMode;
+
+  // ドラッグ中の state を ref で追跡し、実質変化がない場合は setState をスキップする。
+  // pointermove ごとに onDragOver が発火するため、不要な再レンダーを防ぐ。
+  const dropTargetColumnRef = useRef<ColumnKey | null>(null);
+  const crossColumnGhostRef = useRef<CrossColumnGhost | null>(null);
+
+  const setDropTargetColumnStable = useCallback((next: ColumnKey | null) => {
+    if (dropTargetColumnRef.current === next) return;
+    dropTargetColumnRef.current = next;
+    setDropTargetColumn(next);
+  }, []);
+
+  const setCrossColumnGhostStable = useCallback((next: CrossColumnGhost | null) => {
+    const prev = crossColumnGhostRef.current;
+    if (prev === next) return;
+    if (prev && next && prev.column === next.column && prev.beforeKey === next.beforeKey) return;
+    crossColumnGhostRef.current = next;
+    setCrossColumnGhost(next);
+  }, []);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveDrag((event.active.data.current ?? null) as ActiveDrag | null);
-  };
+  }, []);
 
-  const handleDragOver = (event: DragOverEvent) => {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const activeType = event.active.data.current?.type;
     if (activeType === 'column') {
-      setDropTargetColumn(null);
-      setCrossColumnGhost(null);
+      setDropTargetColumnStable(null);
+      setCrossColumnGhostStable(null);
       return;
     }
     const activeColumn = event.active.data.current?.column as ColumnKey | undefined;
@@ -611,30 +647,34 @@ export default function TasksPage() {
 
     // TODOは課題カラムにドロップできないので、ハイライトも点線プレビューも出さない
     if (activeType === 'todo' && targetColumn === 'assignment') {
-      setDropTargetColumn(null);
-      setCrossColumnGhost(null);
+      setDropTargetColumnStable(null);
+      setCrossColumnGhostStable(null);
       return;
     }
 
-    setDropTargetColumn(targetColumn);
+    setDropTargetColumnStable(targetColumn);
 
     if (activeColumn && targetColumn && activeColumn !== targetColumn) {
       const overType = overData?.type as string | undefined;
       const isOverItem = overType && overType !== 'column';
-      setCrossColumnGhost({
+      setCrossColumnGhostStable({
         column: targetColumn,
         beforeKey: isOverItem ? String(event.over!.id) : null,
       });
     } else {
-      setCrossColumnGhost(null);
+      setCrossColumnGhostStable(null);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const active = (event.active.data.current ?? null) as ActiveDrag | null;
     const overData = event.over?.data.current as Record<string, unknown> | undefined;
     setActiveDrag(null);
+    dropTargetColumnRef.current = null;
     setDropTargetColumn(null);
+    crossColumnGhostRef.current = null;
     setCrossColumnGhost(null);
     if (!active) return;
 
@@ -687,7 +727,7 @@ export default function TasksPage() {
             insertIntoAssignmentColumn(id, overData.id as string);
           }
           void moveBoardStatus(id, 'assignment');
-        } else if (sourceColumn === 'assignment' && overData?.type === 'assignment' && assignmentSortMode === 'deadline-asc') {
+        } else if (sourceColumn === 'assignment' && overData?.type === 'assignment' && assignmentSortModeRef.current === 'deadline-asc') {
           reorderAssignmentColumn(id, overData);
         }
         return;
@@ -745,7 +785,8 @@ export default function TasksPage() {
         reorderDoneColumn(`${doneKind}:${id}`, overData);
       }
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const overlayLabel = useMemo(() => {
     if (!activeDrag) return null;
@@ -889,7 +930,9 @@ export default function TasksPage() {
             onDragEnd={handleDragEnd}
             onDragCancel={() => {
               setActiveDrag(null);
+              dropTargetColumnRef.current = null;
               setDropTargetColumn(null);
+              crossColumnGhostRef.current = null;
               setCrossColumnGhost(null);
             }}
           >
@@ -911,7 +954,7 @@ export default function TasksPage() {
               onAssignmentSortModeChange={handleAssignmentSortChange}
               onAssignmentFilterModeChange={handleAssignmentFilterChange}
               onTodoViewModeChange={handleTodoViewModeChange}
-              onCreateTodo={title => void handleCreateTodoWithTitle(title)}
+              onCreateTodo={handleCreateTodoWithTitle}
               onCreateTodoBelow={handleCreateTodoBelow}
               onCreateTodoBefore={handleCreateTodoBefore}
               onChangeTodoTitle={handleChangeTodoTitle}

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Todo } from '../../api/tasks';
 import { type TodoColumnItem, type TodoViewMode, todoColumnItemKey } from '../../lib/tasksBoard';
@@ -33,7 +33,7 @@ type Props = {
 // TODOカラム。テキストモードは「エディタ」、リストモードは同じブロックを見やすく
 // 強調しただけの状態として扱う（別UIにはしない）。1つの Todo / 課題 は常に同じ
 // TodoBlock コンポーネントで描画し、variant で chrome の強さと行番号表示だけを切り替える。
-export default function TodoColumn({
+export default memo(function TodoColumn({
   items,
   viewMode,
   systemTypes,
@@ -64,26 +64,28 @@ export default function TodoColumn({
     () => items.filter((item): item is { type: 'todo'; todo: Todo } => item.type === 'todo').map(item => item.todo),
     [items],
   );
+  const todoItemsRef = useRef(todoItems);
+  todoItemsRef.current = todoItems;
 
-  const handleCreateBelow = async (afterId: string | null) => {
+  const handleCreateBelow = useCallback(async (afterId: string | null) => {
     const newId = await onCreateTodoBelow(afterId);
     if (newId) setFocusTarget({ id: newId, caret: 'end' });
-  };
+  }, [onCreateTodoBelow]);
 
   // 課題ブロックの授業名行でEnterしたときなど、指定したブロックの直前に新しいTodoを作る。
-  const handleCreateBefore = async (beforeId: string) => {
+  const handleCreateBefore = useCallback(async (beforeId: string) => {
     const newId = await onCreateTodoBefore(beforeId);
     if (newId) setFocusTarget({ id: newId, caret: 'end' });
-  };
+  }, [onCreateTodoBefore]);
 
-  const handleDeleteBlock = (id: string, focusPrev: boolean) => {
+  const handleDeleteBlock = useCallback((id: string, focusPrev: boolean) => {
     if (focusPrev) {
-      const index = todoItems.findIndex(t => t.id === id);
-      const prev = index > 0 ? todoItems[index - 1] : null;
+      const index = todoItemsRef.current.findIndex(t => t.id === id);
+      const prev = index > 0 ? todoItemsRef.current[index - 1] : null;
       if (prev) setFocusTarget({ id: prev.id, caret: 'end' });
     }
     onDeleteTodo(id);
-  };
+  }, [onDeleteTodo]);
 
   // 表示フィルタ。データ（items / todoColumnOrder）自体は変更しない。
   // リストモード: 「そのまま書き続けられる」ための空Todo（テキストモード用の空行）は表示しない。
@@ -92,20 +94,23 @@ export default function TodoColumn({
     if (viewMode === 'text') return items;
     return items.filter(item => item.type !== 'todo' || item.todo.title.trim() !== '');
   }, [items, viewMode]);
+  const renderItemsRef = useRef(renderItems);
+  renderItemsRef.current = renderItems;
   const itemKeys = useMemo(() => renderItems.map(todoColumnItemKey), [renderItems]);
 
   // ↑↓キーでのブロック間移動は、表示中の全ブロック（Todo・課題どちらも）を対象にする。
   // 課題ブロックへ移動した場合、表示順に沿って自然に見えるよう、下方向で入るときは授業名、
   // 上方向で入るときは期限に着地する（課題タイトルへ直接着地させたい場合だけ field を省略する）。
-  const handleNavigate = (id: string, dir: 'prev' | 'next') => {
-    const index = renderItems.findIndex(it => (it.type === 'todo' ? it.todo.id : it.assignment.id) === id);
+  const handleNavigate = useCallback((id: string, dir: 'prev' | 'next') => {
+    const current = renderItemsRef.current;
+    const index = current.findIndex(it => (it.type === 'todo' ? it.todo.id : it.assignment.id) === id);
     if (index < 0) return;
-    const target = dir === 'prev' ? renderItems[index - 1] : renderItems[index + 1];
+    const target = dir === 'prev' ? current[index - 1] : current[index + 1];
     if (!target) return;
     const targetId = target.type === 'todo' ? target.todo.id : target.assignment.id;
     const field: AssignmentFocusField | undefined = target.type === 'assignment' ? (dir === 'prev' ? 'deadline' : 'course') : undefined;
     setFocusTarget({ id: targetId, caret: dir === 'prev' ? 'end' : 'start', field });
-  };
+  }, []);
 
   // テキストモードを開いたら、すぐ入力できるよう先頭ブロックにカーソルを入れる（初回のみ）。
   const didInit = useRef(false);
@@ -127,12 +132,12 @@ export default function TodoColumn({
 
   // テキストモードでは「そのまま書き続けられる」ように、末尾のブロックに入力して確定（blur）したら
   // 新しい空ブロックを末尾に追加する。フォーカスは奪わない（クリックして離れた先を優先する）。
-  const ensureTrailingEmptyBlock = (id: string) => {
-    const last = renderItems[renderItems.length - 1];
+  const ensureTrailingEmptyBlock = useCallback((id: string) => {
+    const last = renderItemsRef.current[renderItemsRef.current.length - 1];
     if (last?.type === 'todo' && last.todo.id === id) {
       void onCreateTodoBelow(id);
     }
-  };
+  }, [onCreateTodoBelow]);
 
   const emptyLabel = viewMode === 'list' ? '上のフォームから TODO を追加' : 'Enter で TODO を作成';
 
@@ -205,7 +210,7 @@ export default function TodoColumn({
       </div>
     </ColumnShell>
   );
-}
+});
 
 function ViewModeToggle({ mode, onChange }: { mode: TodoViewMode; onChange: (mode: TodoViewMode) => void }) {
   const options: { value: TodoViewMode; label: string }[] = [

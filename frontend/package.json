@@ -36,5 +36,8 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.1"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.62.2"
   }
 }

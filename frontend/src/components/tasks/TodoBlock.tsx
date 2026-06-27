@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Assignment, Todo } from '../../api/tasks';
@@ -108,7 +108,7 @@ function focusTextareaAt(el: HTMLTextAreaElement | null, pos: 'start' | 'end') {
 // テキストモードは「本当にエディタに見えるUI」を優先し、通常時は背景・枠線・角丸を
 // 一切出さず、行番号ガターだけ固定幅で揃えた、ただのテキスト行として表示する。
 // ドラッグ操作（オブジェクト化）はテキストモードでは一旦オフにしている（後で戻す）。
-export default function TodoBlock({
+function TodoBlock({
   item,
   variant,
   lineNumber,
@@ -318,6 +318,35 @@ export default function TodoBlock({
     </div>
   );
 }
+
+// カスタム comparator: item の参照は todo タイトル変更のたびに変わるため ref 比較だと
+// 毎回再レンダーになる。実際に表示・挙動に影響するフィールドだけを比較してスキップを判定する。
+// コールバック群は useCallback (安定参照) またはstableなsetter を閉じるインライン矢印で
+// 動作上の意味は変わらないため比較対象から外す（チェックするとドラッグ中に毎回再レンダーになる）。
+// LMS由来フィールド (course_name / availability_end 等) はセッション中に変化しないため省略。
+export default memo(TodoBlock, (prev, next) => {
+  if (prev.variant !== next.variant) return false;
+  if (prev.lineNumber !== next.lineNumber) return false;
+  if (prev.isLast !== next.isLast) return false;
+  if (prev.busy !== next.busy) return false;
+  if (prev.autoFocus !== next.autoFocus) return false;
+  if (prev.caret !== next.caret) return false;
+  if (prev.focusField !== next.focusField) return false;
+  if (prev.isMobile !== next.isMobile) return false;
+  if (prev.item === next.item) return true;
+  if (prev.item.type !== next.item.type) return false;
+  if (prev.item.type === 'todo' && next.item.type === 'todo') {
+    return prev.item.todo.id === next.item.todo.id
+      && prev.item.todo.title === next.item.todo.title
+      && prev.item.todo.is_done === next.item.todo.is_done;
+  }
+  if (prev.item.type === 'assignment' && next.item.type === 'assignment') {
+    return prev.item.assignment.id === next.item.assignment.id
+      && prev.item.assignment.task_name === next.item.assignment.task_name
+      && prev.item.assignment.board_status === next.item.assignment.board_status;
+  }
+  return false;
+});
 
 // 課題ブロック。授業名・残り期限は変更不可（LMS由来）だが、disabled/readOnly は使わず通常の
 // textarea として表示する（caret表示・ドラッグ選択・矢印キー移動をブラウザネイティブに保つため）。
@@ -782,7 +811,7 @@ function TodoBlockContent({
     return () => {
       if (startEditRef) startEditRef.current = null;
     };
-  }); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commit = (value: string) => {
     if (value !== todo.title) onChangeTitle(todo.id, value);

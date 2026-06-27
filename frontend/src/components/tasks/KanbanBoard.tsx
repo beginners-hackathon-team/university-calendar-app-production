@@ -1,4 +1,4 @@
-import { Fragment, useRef, type PointerEvent, type ReactNode } from 'react';
+import { Fragment, memo, useRef, type PointerEvent, type ReactNode } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -43,7 +43,7 @@ type Props = {
   onMoveDoneTodoToTodo: (id: string) => void;
 };
 
-export default function KanbanBoard(props: Props) {
+export default memo(function KanbanBoard(props: Props) {
   const { visibleOrder } = props;
   // 列の実測幅（px）を保持し、リサイズ開始時の基準値として使う。
   const columnRefs = useRef<Partial<Record<ColumnKey, HTMLElement | null>>>({});
@@ -92,7 +92,7 @@ export default function KanbanBoard(props: Props) {
       </div>
     </SortableContext>
   );
-}
+});
 
 type SlotProps = {
   setNodeRef: (node: HTMLElement | null) => void;
