@@ -1,9 +1,11 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Literal, Optional
 from datetime import datetime
 
 
 class PersonalEventPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     title: str
     start: str
@@ -11,9 +13,6 @@ class PersonalEventPublic(BaseModel):
     all_day: bool
     color: Optional[str]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CreatePersonalEvent(BaseModel):
@@ -33,6 +32,8 @@ class UpdatePersonalEvent(BaseModel):
 
 
 class AssignmentPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     task_name: str
     task_contents_id: str
@@ -56,9 +57,6 @@ class AssignmentPublic(BaseModel):
     @classmethod
     def coerce_none_to_str(cls, v):
         return v if v is not None else ''
-
-    class Config:
-        from_attributes = True
 
 
 class UpdateAssignmentDone(BaseModel):
@@ -104,14 +102,13 @@ class ImportLmsTasksPayload(BaseModel):
 
 
 class TodoPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     title: str
     is_done: bool
     done_at: Optional[datetime]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CreateTodo(BaseModel):

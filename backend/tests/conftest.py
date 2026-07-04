@@ -6,9 +6,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.auth import CurrentUser, get_current_user
 from app.core.config import settings
 from app.db.base import Base
-from app.main import CurrentUser, app, get_current_user, get_db
+from app.db.session import get_db
+from app.main import app
 
 # Base.metadata に全テーブルを登録させるための import（副作用目的）
 from app.models import (  # noqa: F401

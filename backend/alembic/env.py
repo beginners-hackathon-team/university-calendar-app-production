@@ -12,7 +12,10 @@ from app.db.base import Base
 from app.models import enrollment  # noqa: F401
 from app.models import course  # noqa: F401
 from app.models import course_date  # noqa: F401
-from app.models import university_event  # noqa F401
+from app.models import university_event  # noqa: F401
+from app.models import profile  # noqa: F401
+from app.models import task  # noqa: F401
+from app.models import personal_event  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
