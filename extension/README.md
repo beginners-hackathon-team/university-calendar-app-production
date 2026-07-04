@@ -1,345 +1,133 @@
-# Chrome拡張機能 MVP仕様書
+# KU Calendar 連携用 Chrome拡張機能
 
-## 目的
-
-金沢大学ポータルおよびWebClass LMS上のHTMLを取得し、既存バックエンドへ送信するChrome拡張機能を実装する。
-
-現段階ではHTML解析は行わない。
-
-取得したHTMLをそのままバックエンドへ送信できる状態を最初のゴールとする。
+金沢大学ポータルおよびWebClass LMSのページから履修情報・課題情報を取得し、KU Calendar（本アプリ）に同期するChrome拡張機能（Manifest V3）。
 
 ---
 
-## 対象サイト
+## できること
 
-### 金沢大学ポータル
-
-```text
-https://eduweb.sta.kanazawa-u.ac.jp/
-```
-
-### WebClass LMS
-
-```text
-https://lms-wc.el.kanazawa-u.ac.jp/
-```
+- 履修登録一覧ページ（ポータル）から時間割情報を取得し、アプリへ同期
+- シラバスページから教室情報を補完
+- LMS（WebClass）の授業ページから課題・提出物情報を取得し、アプリへ同期
+- ポータルの学期選択（Q1〜Q4）をアプリ側から遷移してきた際に自動選択
 
 ---
 
-## 対象ページ
+## ディレクトリ構成
 
-### 履修登録一覧
-
-```text
-https://eduweb.sta.kanazawa-u.ac.jp/Portal/StudentApp/Regist/RegistList.aspx
 ```
-
-### LMS教材ページ
-
-```text
-https://lms-wc.el.kanazawa-u.ac.jp/webclass/course.php/{courseId}/?acs_={token}
-```
-
-### LMSマイレポートページ
-
-```text
-https://lms-wc.el.kanazawa-u.ac.jp/webclass/course.php/{courseId}/my-reports?acs_={token}
-```
-
----
-
-## 実装対象
-
-### 1. 履修登録一覧ページ
-
-対象URLでContent Scriptを実行する。
-
-ページ上に以下のボタンを表示する。
-
-```text
-履修情報を取得
-```
-
-ボタン押下時の処理
-
-```text
-現在ページのHTMLを取得
-↓
-バックエンドへPOST
-```
-
-また、将来の教室取得のために以下のURL取得処理だけ実装する。
-
-```text
-LectureList.aspx?lct_year={年度}&lct_cd={授業ID}
-```
-
-ただし現段階ではHTML解析しない。
-
-取得したHTMLをそのままバックエンドへ送信する。
-
----
-
-### 2. LMS教材ページ
-
-対象URLでContent Scriptを実行する。
-
-ページ上に以下のボタンを表示する。
-
-```text
-LMS情報を取得
-```
-
-ボタン押下時の処理
-
-```text
-現在ページのHTMLを取得
-↓
-バックエンドへPOST
-```
-
----
-
-### 3. LMSマイレポート取得
-
-LMS教材ページでボタンが押された際に実行する。
-
-現在のURLから
-
-```text
-courseId
-acs_
-```
-
-を取得する。
-
-以下のURLを生成する。
-
-```text
-/course.php/{courseId}/my-reports?acs_={token}
-```
-
-Background Service Worker経由で取得する。
-
-取得したHTMLはそのままバックエンドへ送信する。
-
----
-
-## HTML解析
-
-実装しない。
-
-以下は全てスタブでよい。
-
-```text
-parseRegisteredCourses()
-parseLectureDetail()
-parseLmsCoursePage()
-parseMyReports()
-```
-
-現段階では呼び出さなくてもよい。
-
----
-
-## バックエンド送信
-
-エンドポイント
-
-```text
-POST /api/extension/sync
-```
-
-送信形式
-
-```json
-{
-  "type": "regist-list",
-  "url": "current_url",
-  "html": "<html>...</html>"
-}
-```
-
-```json
-{
-  "type": "lecture-detail",
-  "url": "lecture_url",
-  "html": "<html>...</html>"
-}
-```
-
-```json
-{
-  "type": "lms-course",
-  "url": "course_url",
-  "html": "<html>...</html>"
-}
-```
-
-```json
-{
-  "type": "my-reports",
-  "url": "report_url",
-  "html": "<html>...</html>"
-}
-```
-
----
-
-## CSP対策
-
-ページJavaScriptからのfetchは使用しない。
-
-外部URL取得はすべてBackground Service Workerで行う。
-
-```text
-content script
-↓
-runtime.sendMessage
-↓
-background
-↓
-fetch
-↓
-結果返却
-```
-
----
-
-## Manifest
-
-必要権限
-
-```json
-{
-  "permissions": [
-    "storage"
-  ],
-  "host_permissions": [
-    "https://eduweb.sta.kanazawa-u.ac.jp/*",
-    "https://lms-wc.el.kanazawa-u.ac.jp/*",
-    "http://localhost:8000/*"
-  ]
-}
-```
-
----
-
-## 実装ファイル
-
-```text
 extension/
-├── manifest.json
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-└── src/
-    ├── background/
-    │   └── background.ts
-    ├── content/
-    │   └── content.ts
-    ├── shared/
-    │   ├── api.ts
-    │   ├── messages.ts
-    │   └── urls.ts
-    └── parsers/
-        ├── registParser.ts
-        ├── lectureDetailParser.ts
-        ├── lmsCourseParser.ts
-        └── myReportsParser.ts
+├── manifest.template.json   # __APP_URL__ / __SUPABASE_URL__ をプレースホルダに持つテンプレート
+├── manifest.json            # generate-manifest.js が生成する実ファイル（gitに含まれるが自動生成物）
+├── scripts/
+│   └── generate-manifest.js # .env.<mode> を読んでmanifest.template.jsonを置換
+├── src/
+│   ├── background/
+│   │   └── background.ts    # Service Worker。fetch・トークン管理・タブ操作など権限が必要な処理
+│   ├── content/
+│   │   ├── content.ts       # ポータル/LMSページに注入されるUI（サイドパネル・ボタン）
+│   │   └── appContent.ts    # KU Calendar本体（Webアプリ）側に注入し、拡張機能の状態をアプリに伝える
+│   ├── popup/
+│   │   ├── Popup.tsx, popup.ts, popup.html, popup.css  # 拡張機能アイコンクリック時のポップアップ
+│   ├── parsers/              # 各ページのHTML解析
+│   │   ├── registParser.ts        # 履修登録一覧
+│   │   ├── syllabusParser.ts      # シラバス（教室情報）
+│   │   ├── actingListParser.ts    # 授業実施一覧（LMS種別・LMSコースID）
+│   │   ├── lmsCourseParser.ts     # LMS教材ページ
+│   │   └── myReportsParser.ts     # LMSマイレポート（提出物）
+│   ├── shared/
+│   │   ├── api.ts, messages.ts, urls.ts  # バックエンド通信・メッセージ型・URL定数
+│   └── page-bridge.js        # ページのメインワールドで`__doPostBack`を実行するためのブリッジ
+├── icons/
+└── package.json
 ```
 
 ---
 
-## MVP完了条件
+## 環境変数
 
-* RegistList.aspx にボタンが表示される
-* LMS教材ページにボタンが表示される
-* 現在ページHTMLを取得できる
-* my-reportsをBackground経由で取得できる
-* LectureList.aspxをBackground経由で取得できる
-* バックエンドへPOSTできる
-* HTML解析は未実装でもよい
+`.env.example` をコピーして使う。
 
----
+```bash
+cp .env.example .env.development   # ローカル開発用
+cp .env.example .env.production    # 本番ビルド用
+```
 
-## 認証・拡張機能接続方針
+| 変数 | 用途 |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabaseプロジェクトのproject URL（`manifest.json`の`host_permissions`にも使われる） |
+| `VITE_SUPABASE_ANON_KEY` | Supabaseのanon key |
+| `VITE_APP_URL` | KU Calendar本体のURL（開発時は`http://localhost:5173`、本番はデプロイ先URL） |
 
-### 基本方針
-
-Chrome拡張機能内でユーザー名・パスワードによるログイン画面は実装しない。
-
-認証はWebアプリ側で行い、Chrome拡張機能は発行済みの接続トークンを利用してバックエンドと通信する。
-
-これにより、将来的な認証方式の変更（Googleログイン、GitHubログイン等）に対して、拡張機能側の変更を最小限にできる。
+`.env.local` を作ると `.env.<mode>` より優先して値を上書きできる（個人設定用、`.gitignore`済み）。
 
 ---
 
-### 想定フロー
+## ビルド
 
-```text
-ユーザーがWebアプリにログイン
-（メールアドレス / Googleログイン 等）
-↓
-Webアプリの設定画面で
-「Chrome拡張機能を接続」を実行
-↓
-バックエンドが extension token を発行
-↓
-Chrome拡張機能に保存
-(chrome.storage.local)
-↓
-以降のAPI通信では
-Authorization: Bearer {extension_token}
-を付与
+```bash
+npm install
+
+# 開発ビルド（.env.development を使用、localhost:5173 も対象に追加）
+npm run build:dev
+
+# 本番ビルド（.env.production を使用）
+npm run build
+```
+
+内部的には `scripts/generate-manifest.js` が `.env.<mode>` を読んで `manifest.template.json` の `__APP_URL__` / `__SUPABASE_URL__` を置換し `manifest.json` を生成した上で、`background` / `content` / `popup` / `appContent` の4エントリーをそれぞれ `vite build` する。出力は `dist/` にまとまる。
+
+個別のエントリーだけ監視ビルドしたい場合:
+
+```bash
+npm run dev:background
+npm run dev:content
+npm run dev:popup
 ```
 
 ---
 
-### MVPでの実装方針
+## Chromeへの読み込み方法
 
-初期実装では、接続フローは簡易化する。
+1. `npm run build:dev` を実行（`dist/` が生成される）
+2. Chromeで `chrome://extensions` を開く
+3. 右上の「デベロッパーモード」をON
+4. 「パッケージ化されていない拡張機能を読み込む」→ `extension/dist` を選択
 
-```text
-Webアプリで extension token を発行
-↓
-ユーザーが拡張機能へ貼り付け
-↓
+コードを変更したら再度ビルドし、`chrome://extensions` でリロードボタンを押す。
+
+---
+
+## 認証の仕組み
+
+拡張機能は独自のログイン画面を持たない。KU Calendar本体（Webアプリ）にログインした際のSupabaseセッションを、拡張機能側の `chrome.storage.local` に受け渡して利用する。
+
+```
+Webアプリにログイン（Supabase Auth）
+  ↓
+appContent.ts（Webアプリのページに注入されているcontent script）が
+ブラウザのlocalStorageからSupabaseのセッション（access_token / refresh_token）を読み取り
+  ↓
 chrome.storage.local に保存
+  ↓
+content.ts（ポータル/LMSページ）・popup・background.ts が
+chrome.storage.local からトークンを読み、
+Authorization: Bearer <token> でバックエンドAPIを呼ぶ
+  ↓
+（トークン失効時）background.ts がSupabaseのrefresh_tokenエンドポイントを叩いて
+access_tokenを再発行し、chrome.storage.local を更新
 ```
 
-拡張機能は保存されたトークンを利用してバックエンドへ通信する。
+`page-bridge.js` は上記とは別役割で、ポータルページの `__doPostBack`（ASP.NET標準のポストバック関数）をページのメインワールドから実行するための橋渡し専用スクリプト（Content ScriptのIsolated Worldからは直接呼べないため）。学期セレクタの自動切り替え（`shared/urls.ts` の `targetTerm` 処理）で使われる。
 
 ---
 
-### 将来実装
+## バックエンドとの通信
 
-将来的には以下のような接続フローへ移行する。
-
-```text
-Webアプリにログイン済み
-↓
-「Chrome拡張機能を接続」
-↓
-ワンクリックで拡張機能へトークンを受け渡し
-↓
-自動接続
-```
+呼び出すエンドポイントは本体アプリの [docs/API.md](../docs/API.md) の「拡張機能連携（extension）」を参照。
 
 ---
 
-### Googleログイン対応
+## UIデザイン
 
-認証はWebアプリ側で管理する。
-
-そのため、
-
-* メールアドレス / パスワード
-* Googleログイン
-* GitHubログイン
-* その他OAuthログイン
-
-へ変更しても、Chrome拡張機能側の実装変更は不要とする。
-
-Chrome拡張機能は認証方式を意識せず、発行済みの extension token のみを利用する。
-
+注入するUI（サイドパネル・ボタン等）のスタイル仕様は [DESIGN.md](./DESIGN.md) を参照。

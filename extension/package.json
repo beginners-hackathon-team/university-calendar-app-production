@@ -1,7 +1,7 @@
 {
   "name": "extension",
   "version": "1.0.0",
-  "description": "金沢大学ポータルおよびWebClass LMS上のHTMLを取得し、既存バックエンドへ送信するChrome拡張機能を実装する。",
+  "description": "金沢大学ポータルおよびWebClass LMSから履修情報・課題情報を取得し、KU Calendarに同期するChrome拡張機能。",
   "main": "index.js",
   "scripts": {
     "build": "node scripts/generate-manifest.js production && BUILD_ENTRY=background vite build && BUILD_ENTRY=content vite build && BUILD_ENTRY=popup vite build && BUILD_ENTRY=appContent vite build && cp manifest.json dist/ && cp src/popup/popup.html dist/ && cp src/page-bridge.js dist/ && cp -r icons dist/",

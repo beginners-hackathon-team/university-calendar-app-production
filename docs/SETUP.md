@@ -3,9 +3,7 @@ Macは多少異なるかも
 
 ## 主なディレクトリ構造
 
-
 [README.md](/README.md)を参照
-
 
 > 実際にコードを書くのは `backend/app/` と `frontend/src/` の中が中心になる。
 
@@ -19,7 +17,7 @@ Macは多少異なるかも
 - [Visual Studio Code](https://code.visualstudio.com/)
 （Antigravityなどでも可）
 - VSCode 拡張機能: [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
+- [Supabase](https://supabase.com/) プロジェクト（認証基盤。無料プランで可）
 
 ### 手順
 
@@ -34,9 +32,47 @@ cd {リポジトリ名}
 
 ```bash
 cp compose.override.yml.example compose.override.yml
+```
+
+`compose.override.yml` は個人設定用（`.gitignore`済み）。
+
+続いて、バックエンド用の `.env` をルートに作成する：
+
+```bash
 cp .env.example .env
 ```
-.env.exampleの内容は開発コンテナ用。.envは各自適宜変更
+
+`.env` の中身（`SUPABASE_URL` は各自のSupabaseプロジェクトのものに書き換える）：
+
+```bash
+DATABASE_URL=postgresql+psycopg://app:app@db:5432/app
+SUPABASE_URL=https://<your-project>.supabase.co
+CORS_ORIGINS=http://localhost:5173
+APP_URL=http://localhost:5173
+```
+
+- `DATABASE_URL`: Dev Container内では上記の値で固定（`db`はcompose内のPostgresサービス名）
+- `SUPABASE_URL`: SupabaseプロジェクトのURL。JWT検証（JWKS取得）に使う
+- `CORS_ORIGINS`: フロントのオリジンをカンマ区切りで（開発時は`http://localhost:5173`のみでOK）
+- `APP_URL`: プライバシーポリシーページなどで表示するアプリの公開URL
+
+フロントエンド用の環境変数もコピーする：
+
+```bash
+cd frontend
+cp .env.example .env.development
+```
+
+`frontend/.env.development` の中身：
+
+```bash
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<Supabaseのanon key>
+VITE_API_PROXY_TARGET=http://localhost:8000
+VITE_EXTENSION_STORE_URL=（任意。Chrome拡張機能のストアURL）
+```
+
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` はSupabaseダッシュボードの Project Settings → API から取得する。
 
 **3. Docker Desktop を起動する**
 
@@ -87,11 +123,22 @@ uv run alembic upgrade head
 docker compose exec db psql -U app -d app -c "\dt"
 ```
 
-`users` と `alembic_version` の2テーブルが表示されればOK。
+`profiles`, `courses`, `course_dates`, `enrollments`, `university_event`, `tasks`, `personal_events`, `alembic_version` などのテーブルが表示されればOK（詳細は [DATABASE.md](./DATABASE.md) を参照）。
 
-詳細は [DATABASE.md](./DATABASE.md) を参照。
+**7. 大学イベントの初期データ投入**
 
-**7. 動作確認**
+```bash
+cd backend
+uv run python -m app.db.seed_university_event data/universityevent_2026.json
+```
+
+年度別のJSONファイルを `backend/data/` 配下に配置して投入する。詳細は [README.md](/README.md) を参照。
+
+**8. 管理者ユーザーの設定**
+
+Supabase Auth でユーザー登録（フロントの `/register` から、またはSupabaseダッシュボードから）した後、そのユーザーを管理者にする場合はSupabaseの `raw_app_meta_data` に `is_admin: true` を設定する（詳細は [DEPLOY.md](./DEPLOY.md) を参照）。
+
+**9. 動作確認**
 
 コンテナが起動したら、VSCode のターミナルを2つ開いて以下を実行する。
 

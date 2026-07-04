@@ -1,195 +1,223 @@
-# バックエンドとの通信ガイド
+# API リファレンス
 
-フロントエンド（TypeScript）から FastAPI へリクエストを送る方法をまとめたガイドです(AI作成)。
-参考程度に
+`backend/app/main.py` に定義されている実際のエンドポイント一覧。
+`fetch` の書き方・CORS・エラーハンドリングなど一般的なパターンは [TYPESCRIPT.md](./TYPESCRIPT.md) を参照。
 
 ---
 
-## 基本パターン
+## 共通事項
 
-`fetch` を使って API にリクエストを送る。必ず `async / await` で書く。
+- **ベースURL**: 開発時は `http://localhost:8000`、本番は同一オリジン（フロントと同じドメインから配信）
+- **認証**: `/api/health` と `/privacy` を除く全エンドポイントで Supabase Auth の JWT が必要
+  - ヘッダー: `Authorization: Bearer <access_token>`
+  - フロント側は `frontend/src/api/client.ts` の `authFetch` がトークン付与と401時のログアウト処理を自動で行う
+- **管理者限定エンドポイント**: JWTの `app_metadata.is_admin` が `true` であることが必要（`get_admin_user` 依存関数、403で拒否）
+- **エラー形式**: `{ "detail": "エラーメッセージ" }`
 
-```ts
-// GET リクエスト
-async function getUsers(): Promise<User[]> {
-  const res = await fetch('/api/users');
-  if (!res.ok) {
-    throw new Error(`エラー: ${res.status}`);
-  }
-  const data: User[] = await res.json();
-  return data;
-}
+---
 
-// POST リクエスト
-async function createUser(name: string, email: string): Promise<User> {
-  const res = await fetch('/api/users', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name, email }),
-  });
-  if (!res.ok) {
-    throw new Error(`エラー: ${res.status}`);
-  }
-  const data: User = await res.json();
-  return data;
-}
+## ヘルスチェック
+
+```
+GET /api/health
+  認証: 不要
+  res: 200 { "status": "ok" }
 ```
 
 ---
 
-## レスポンスの型定義
+## ユーザー情報（me / profiles）
 
-API が返す JSON の構造に合わせて `interface` を定義する。  
-FastAPI のスキーマと合わせておくと型の恩恵を受けやすい。
+```
+GET /api/me
+  res: 200 { id, display_name, is_admin, assignment_sync_mode }
 
-```ts
-// src/types.ts にまとめて管理すると便利
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-interface ApiError {
-  detail: string;
-}
+PATCH /api/me
+  req: { display_name?, assignment_sync_mode? }   # assignment_sync_mode は "auto" | "manual"
+  res: 200 { display_name, assignment_sync_mode }
 ```
 
-### FastAPI 側のスキーマと対応させる
-
-```python
-# backend/app/schemas/user.py
-from pydantic import BaseModel
-
-class UserResponse(BaseModel):
-    id: int
-    name: str
-    email: str
-```
-
-```ts
-// frontend/src/types.ts
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-```
-
-> フィールド名・型を FastAPI 側と一致させる。ずれると実行時エラーになる。
+初回アクセス時に `profiles` テーブルの行が無ければ自動作成される（`ensure_profile`）。
 
 ---
 
-## エラーハンドリング
+## 時間割（courses）
 
-```ts
-async function getUsers(): Promise<void> {
-  try {
-    const res = await fetch('/api/users');
-
-    if (!res.ok) {
-      // HTTPエラー（4xx, 5xx）
-      const error: ApiError = await res.json();
-      showError(error.detail);
-      return;
-    }
-
-    const users: User[] = await res.json();
-    renderUsers(users);
-
-  } catch (error) {
-    // ネットワークエラー（サーバーに繋がらないなど）
-    showError('サーバーに接続できませんでした');
-  }
-}
 ```
+POST /api/course
+  req: { name, room, teacher, year, quarter(1-4), day_of_week("月"〜"日"), period(1-6) }
+  res: 200（courseとcourse_date, enrollmentを同時作成）
 
-### ステータスコードの目安
+GET /api/courses/{year-quarter}
+  例: /api/courses/2026-1
+  res: 200 [{ id, name, room, teacher, year, quarter, day_of_week, period,
+              is_intensive_lct, lms_course_id, lms_system_type }]
+  ※ 自分の履修（enrollments）のみ返す
 
-| ステータス | 意味 | 対処 |
-|---|---|---|
-| `200` | 成功 | レスポンスを使う |
-| `400` | リクエストが不正 | 入力値を確認する |
-| `404` | リソースが見つからない | 存在しないIDなど |
-| `422` | バリデーションエラー | FastAPI が型チェックで弾いた |
-| `500` | サーバー内部エラー | バックエンドのログを確認する |
+PUT /api/course/{course_id}
+  req: { name, room, teacher }
+  res: 200 { id, name, room, teacher }
+  ※ 自分の履修のみ編集可（enrollmentが無ければ404）
+
+DELETE /api/course/{course_id}
+  res: 204
+  ※ 自分の履修のみ削除可
+
+DELETE /api/courses
+  認可: 管理者のみ
+  res: 204（全courseを削除）
+```
 
 ---
 
-## CORS(Cross-Origin Resource Sharing) エラーへの対処
-
-フロントエンド（localhost:5173）からバックエンド（localhost:8000）にリクエストを送ると、オリジンが異なるため CORS エラーが発生する。
+## カレンダー（集約）
 
 ```
-Access to fetch at 'http://localhost:8000/api/users' from origin
-'http://localhost:5173' has been blocked by CORS policy
+GET /api/calendar/{year-month}
+  例: /api/calendar/2026-4
+  res: 200 [{ id, name, room, teacher, dates: ["2026-04-15", ...], period }]
 ```
 
-### FastAPI 側で CORS を設定する
-
-```python
-# backend/app/main.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # 開発時のフロントエンドのURL
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-> 本番環境では `allow_origins` を実際のドメインに変更する。`["*"]` は開発時のみ許可。
+`course_dates`（開講メタ情報）から `services/schedule.py` の `build_class_dates` で実際の開催日を計算して返す。`is_intensive_lct=true`（集中講義）は対象月に関わらず除外される。大学イベント・祝日はここには含まれず、フロント側で別途取得して合成する。
 
 ---
 
-## API の URL 管理
+## 大学イベント（university-events）
 
-開発・本番でURLが変わるため、定数としてまとめておく。
-
-```ts
-// src/api.ts
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
-
-export async function getUsers(): Promise<User[]> {
-  const res = await fetch(`${API_BASE}/api/users`);
-  if (!res.ok) throw new Error(`エラー: ${res.status}`);
-  return res.json();
-}
 ```
+GET /api/university-events/{year}
+  res: 200 [{ id, name, type, date, original_day }]
+  type: "exam" | "interval" | "transfer" | "other" | "holiday"
+  date: "MM-DD" 形式（例: "04-01"）
 
-```bash
-# frontend/.env.local（gitignore 済み）
-VITE_API_BASE=http://localhost:8000
+POST /api/university-events        認可: 管理者のみ
+  req: { year, name, type, date, original_day }
+  res: 200 作成されたイベント
+
+PUT /api/university-events/{id}    認可: 管理者のみ
+  req: { year, name, type, date, original_day }
+  res: 200 更新後のイベント
+
+DELETE /api/university-events/{id} 認可: 管理者のみ
+  res: 204
 ```
-
-> `VITE_` から始まる環境変数だけが Vite でブラウザに公開される。
 
 ---
 
-## フォームの送信パターン
+## 拡張機能連携（extension）
 
-```ts
-const form = document.querySelector<HTMLFormElement>('#login-form');
+Chrome拡張機能（`extension/`）が大学ポータル・LMSから取得した情報を同期するためのエンドポイント。
 
-form?.addEventListener('submit', async (e) => {
-  e.preventDefault(); // ページのリロードを防ぐ
-
-  const nameInput = document.querySelector<HTMLInputElement>('#name');
-  const emailInput = document.querySelector<HTMLInputElement>('#email');
-
-  if (!nameInput || !emailInput) return;
-
-  try {
-    const user = await createUser(nameInput.value, emailInput.value);
-    console.log('作成成功:', user);
-  } catch (error) {
-    console.error('作成失敗:', error);
-  }
-});
 ```
+POST /api/extension/sync
+  req: { type: "regist-list"|"lecture-detail"|"lms-course"|"my-reports", url, html }
+  res: 200 { status: "received", type }
+  ※ 現状はログ出力のみ（受信確認用）
+
+POST /api/extension/import-courses
+  req: { courses: [{ name, teacher, room, year, quarter, day_of_week?, period,
+                      is_intensive_lct, lms_course_id?, lms_system_type? }],
+         sync_year, sync_quarters: [1,2,...] }
+  res: 200 { status: "ok", count }
+  ※ 取得内容で自分の履修をupsert。sync_year/sync_quartersの範囲内で
+     今回取得されなかった履修は削除される（差分同期）
+
+POST /api/extension/import-assignments   （旧フォーマット、互換用）
+  req: { assignments: [{ task_name, task_contents_id, course_name?,
+                          submitted_at?, result, score? }] }
+  res: 200 { status: "ok", count }
+
+POST /api/extension/import-lms-tasks
+  req: { tasks: [{ content_id?, source_url?, title, kind?, course_id?, course_name?,
+                    available_from?, available_until?, raw_text?, is_active_url }] }
+  res: 200 { status: "ok", count }
+  ※ (lms_course_id, content_id) または (lms_course_id, source_url) をキーにupsert
+```
+
+---
+
+## 課題（assignments）
+
+`type="assignment"` の `Task` を扱う。提出済みで1週間以上経過したものは一覧から自動的に除外される。
+
+```
+GET /api/assignments
+  res: 200 [AssignmentPublic]
+  ※ タイトル・種別からLMSの資料/掲示板等を除外するフィルタ（_is_assignment_candidate）を通す
+
+GET /api/lms-system-types
+  res: 200 { [lms_course_id]: lms_system_type }
+  ※ 自分が履修しているLMS連携科目のシステム種別一覧
+
+PUT /api/assignments/{id}/done
+  req: { is_done }
+  res: 200 { status: "ok" }
+
+PUT /api/assignments/{id}/board-status
+  req: { board_status: "assignment" | "todo" | "done" }
+  res: 200 { status: "ok" }
+  ※ "done"にするとis_done/done_atも連動して更新される
+
+PUT /api/assignments/{id}/title
+  req: { task_name }
+  res: 200 { status: "ok" }
+
+DELETE /api/assignments/{id}
+  res: 204
+  ※ 物理削除ではなく is_hidden = true（非表示化）
+```
+
+---
+
+## Todo（todos）
+
+`type="todo"` の `Task` を扱う。
+
+```
+GET /api/todos
+  res: 200 [TodoPublic]
+
+POST /api/todos
+  req: { title }
+  res: 201 TodoPublic
+
+PUT /api/todos/{id}
+  req: { title?, is_done? }
+  res: 200 TodoPublic
+
+DELETE /api/todos/{id}
+  res: 204
+  ※ is_hidden = true（非表示化）
+```
+
+---
+
+## 個人イベント（personal-events）
+
+```
+GET /api/personal-events
+  res: 200 [PersonalEventPublic]
+
+POST /api/personal-events
+  req: { title, start, end?, all_day, color? }
+  res: 201 PersonalEventPublic
+
+PUT /api/personal-events/{id}
+  req: { title, start, end?, all_day, color? }
+  res: 200 PersonalEventPublic
+
+DELETE /api/personal-events/{id}
+  res: 204
+```
+
+---
+
+## プライバシーポリシー（非API）
+
+```
+GET /privacy
+  認証: 不要
+  res: 200 HTML（Chrome拡張機能のプライバシーポリシーページ）
+```
+
+内容は [privacy-policy.md](./privacy-policy.md) を参照（Markdown複製）。実体は `main.py` の `_PRIVACY_POLICY_HTML`。

@@ -12,9 +12,9 @@
 
 | レイヤー | 技術 |
 |---|---|
-| フロントエンド | TypeScript / React + Vite + React Router + FullCalendar |
+| フロントエンド | TypeScript / React + Vite + React Router + FullCalendar + Tailwind CSS |
 | バックエンド | Python / FastAPI |
-| 認証 | JWT (PyJWT) + bcrypt によるパスワードハッシュ化 |
+| 認証 | [Supabase Auth](https://supabase.com/auth)（JWT。バックエンドはJWKSでトークンを検証） |
 | データベース | PostgreSQL / SQLAlchemy / Alembic |
 | デプロイ | Render |
 
@@ -31,32 +31,35 @@
 │   │   ├── env.py              # Alembic 起動スクリプト
 │   │   └── script.py.mako      # マイグレーションテンプレート
 │   ├── app/
-│   │   ├── core/               # 設定（環境変数・JWT 設定）
+│   │   ├── core/               # 設定（環境変数）
 │   │   ├── db/                 # データベース接続・シードスクリプト
-│   │   ├── models/             # SQLAlchemy の Model 定義
-│   │   ├── schemas/            # リクエスト・レスポンスの型定義（Pydantic）
-│   │   ├── services/           # ビジネスロジック（授業日生成など）
-│   │   ├── utils/              # ユーティリティ（UUID 生成・パスワード・JWT）
-│   │   └── main.py             # アプリのエントリーポイント・全エンドポイント
+│   │   ├── models/              # SQLAlchemy の Model 定義
+│   │   ├── schemas/              # リクエスト・レスポンスの型定義（Pydantic）
+│   │   ├── services/              # ビジネスロジック（授業日生成など）
+│   │   ├── utils/                  # ユーティリティ（UUID生成など）
+│   │   └── main.py                # アプリのエントリーポイント・全エンドポイント
 │   ├── alembic.ini             # Alembic 設定ファイル
 │   ├── uv.lock
 │   └── pyproject.toml
 │
-├── frontend/                   # フロントエンド（TypeScript + Vite）
+├── frontend/                   # フロントエンド（React + TypeScript + Vite）
 │   ├── public/                 # 静的ファイル（画像など）
 │   ├── src/
-│   │   ├── api/                # API クライアント（authFetch ラッパー含む）
-│   │   ├── hooks/              # カスタムフック（useMe など）
-│   │   ├── pages/              # 各ページのコンポーネント
-│   │   ├── App.tsx             # ルーティング・認証ガード
-│   │   ├── Layout.tsx          # 共通レイアウト（ヘッダー・ナビ）
-│   │   ├── periodToTime.ts     # 時限と時刻の対応表
-│   │   └── main.tsx            # エントリーポイント
+│   │   ├── api/                 # API クライアント（authFetch ラッパー含む）
+│   │   ├── hooks/                # カスタムフック（useMe など）
+│   │   ├── lib/                   # Supabaseクライアント・共通ロジック
+│   │   ├── components/             # 再利用コンポーネント
+│   │   ├── pages/                   # 各ページのコンポーネント
+│   │   ├── App.tsx                  # ルーティング・認証ガード
+│   │   ├── Layout.tsx                # 共通レイアウト（ヘッダー・ナビ）
+│   │   ├── periodToTime.ts            # 時限と時刻の対応表
+│   │   └── main.tsx                    # エントリーポイント
 │   ├── index.html              # HTML のエントリーポイント
 │   └── package.json            # Node 依存パッケージの定義
 │
-├── docs/                       # 開発ドキュメント
-├── scripts/                    # 開発用スクリプト
+├── extension/                   # Chrome拡張機能（大学ポータル/LMS連携）
+├── docs/                        # 開発ドキュメント
+├── scripts/                     # 開発用スクリプト
 │   └── dev/
 │       ├── start-backend.sh    # バックエンド起動
 │       └── start-frontend.sh   # フロントエンド起動
@@ -71,7 +74,7 @@
 ## 起動方法
 
 ### 開発環境の前提
-Dev Container（VS Code）で起動するか、Docker Compose 経由で起動。詳細は [docs/SETUP.md](docs/SETUP.md) を参照。
+Dev Container（VS Code）で起動するか、Docker Compose 経由で起動。初回セットアップの詳細は [docs/SETUP.md](docs/SETUP.md) を参照。
 
 ### バックエンド
 ```bash
@@ -87,7 +90,9 @@ bash scripts/dev/start-frontend.sh
 
 ---
 
-## 初期セットアップ
+## 初期セットアップ（要点）
+
+詳細な手順（環境変数の設定含む）は [docs/SETUP.md](docs/SETUP.md) を参照。
 
 ### 1. データベースマイグレーション
 ```bash
@@ -104,20 +109,21 @@ uv run python -m app.db.seed_university_event data/universityevent_2026.json
 > 本番環境（Render）でも同じスクリプトを Shell から実行（パスは `data/universityevent_2026.json`）。
 
 ### 3. 初期管理者ユーザーの作成
-ユーザー登録 API でユーザーを作成後、SQL で `is_admin` を付与：
+ユーザー登録は Supabase Auth 経由（フロントの `/register`、またはSupabaseダッシュボード）で行う。登録後、Supabaseの SQL Editor で `app_metadata` に `is_admin: true` を設定して昇格させる：
 
-```bash
-# ユーザー作成（Swagger UI から POST /api/user でも可）
-curl -X POST http://localhost:8000/api/user \
-  -H "Content-Type: application/json" \
-  -d '{"name":"admin","email":"admin@example.com","password":"<password>"}'
-
-# 管理者に昇格
-docker compose exec db psql -U app -d app -c \
-  "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
+```sql
+update auth.users
+set raw_app_meta_data = raw_app_meta_data || '{"is_admin": true}'::jsonb
+where email = 'admin@example.com';
 ```
+
+詳細は [docs/DEPLOY.md](docs/DEPLOY.md) を参照。
 
 ---
 
+## API
+
+エンドポイント一覧は [docs/API.md](docs/API.md) を参照。
+
 ## 設計
-[DESIGN.md](docs/DESIGN.md) を参照
+[docs/DESIGN.md](docs/DESIGN.md) を参照

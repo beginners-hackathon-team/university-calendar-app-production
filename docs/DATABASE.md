@@ -84,7 +84,7 @@ backend/
 │   │   ├── base.py          # DeclarativeBase (Modelの親)
 │   │   └── session.py       # engine, SessionLocal, get_db()
 │   └── models/
-│       └── user.py          # Userテーブル定義
+│       └── profile.py       # profiles テーブル定義（Supabase Authユーザーの追加情報）
 └── pyproject.toml           # 依存関係
 ```
 
@@ -186,37 +186,39 @@ def list_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 ```
 
-### `app/models/user.py` — Model定義（SQLAlchemy 2.0スタイル）
+### `app/models/profile.py` — Model定義（SQLAlchemy 2.0スタイル）
+
+認証自体はSupabase Auth（`auth.users`）に任せているため、アプリ側のDBには**認証情報を持たない**。`profiles`テーブルはSupabaseの`auth.users.id`と同じUUIDを主キーに持ち、アプリ固有の追加情報（表示名・管理者フラグなど）だけを保持する。
 
 ```python
-from datetime import datetime
-from sqlalchemy import String, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.db.base import Base
 
-class User(Base):
-    __tablename__ = "users"
+class Profile(Base):
+    __tablename__ = "profiles"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    student_id: Mapped[str] = mapped_column(String(10), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    user_id: Mapped[str] = mapped_column(PGUUID(as_uuid=False), primary_key=True)
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    assignment_sync_mode: Mapped[str] = mapped_column(String, nullable=False, default='auto')
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 ```
 
 | 記法 | 意味 |
 |---|---|
 | `Mapped[int]` | NOT NULL の int カラム |
-| `Mapped[int \| None]` | NULL 許可の int カラム |
-| `mapped_column(primary_key=True)` | PK + 自動採番（int型の場合） |
-| `String(32)` | VARCHAR(32) |
-| `unique=True` | 重複不可の制約 |
-| `index=True` | 検索用インデックス |
+| `Mapped[str \| None]` | NULL 許可の カラム |
+| `mapped_column(primary_key=True)` | PK（`PGUUID`なのでSupabase発行のUUID文字列をそのまま使う） |
+| `String` | VARCHAR |
 | `server_default=func.now()` | DB側で `CURRENT_TIMESTAMP` を生成 |
 | `DateTime(timezone=True)` | タイムゾーン付き（Postgresでは `TIMESTAMPTZ`） |
 
-**テーブル名の慣例**: `users` のように複数形にする。`user` は予約語と紛らわしいため避ける。
+> `is_admin` はここにも列があるが、実際の管理者判定はリクエスト時のJWTの`app_metadata.is_admin`を見ている（`backend/app/main.py`の`get_current_user`）。`profiles.is_admin`列は現状バックエンドの認可判定には使われていない点に注意。
+
+**テーブル名の慣例**: `profiles` のように複数形にする。
 
 ### `alembic.ini` — Alembic設定
 
@@ -230,7 +232,7 @@ class User(Base):
 # 1. import追加
 from app.core.config import settings
 from app.db.base import Base
-from app.models import user  # noqa: F401
+from app.models import profile  # noqa: F401
 
 # 2. DB接続URLを動的設定
 config = context.config
@@ -312,10 +314,10 @@ uv run python -c "from app.db.session import engine; print(engine.connect())"
 ### （5. Model動作確認）
 
 ```bash
-uv run python -c "from app.models.user import User; print(User.__tablename__, User.__table__.columns.keys())"
+uv run python -c "from app.models.profile import Profile; print(Profile.__tablename__, Profile.__table__.columns.keys())"
 ```
 
-→ `users ['id', 'student_id', 'password_hash', 'created_at']` が出ればOK。
+→ `profiles ['user_id', 'display_name', 'is_admin', 'assignment_sync_mode', 'created_at', 'updated_at']` が出ればOK。
 
 ### （6. Alembic 初期化）
 
@@ -380,12 +382,12 @@ class Quarter(Base):
 **これを忘れるとAlembicがテーブルを検出しない**（autogenerateの結果が空になる）。
 
 ```python
-from app.models import user, quarter  # noqa: F401
+from app.models import profile, quarter  # noqa: F401
 ```
 
 または個別に追加：
 ```python
-from app.models import user      # noqa: F401
+from app.models import profile   # noqa: F401
 from app.models import quarter   # noqa: F401
 ```
 
@@ -436,15 +438,15 @@ docker compose exec db psql -U app -d app -c "\dt"
 ```python
 from sqlalchemy import ForeignKey
 
-class Course(Base):
-    __tablename__ = "courses"
+class Enrollment(Base):
+    __tablename__ = "enrollments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    quarter_id: Mapped[int] = mapped_column(ForeignKey("quarters.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("profiles.user_id"))
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"))
 ```
 
-- 参照先のテーブル（`users`, `quarters`）が**先に作られている**必要がある
+- 参照先のテーブル（`profiles`, `courses`）が**先に作られている**必要がある
 - 同じマイグレーションに複数テーブルが入っていれば、Alembicが依存関係を解決して正しい順序で `create_table` を発行する
 - 既存テーブルへFK追加なら、参照先が先にmigrateされていることを確認
 
@@ -482,9 +484,9 @@ docker compose exec db psql -U app -d app
 
 # psql内のコマンド
 \dt              # テーブル一覧
-\d users         # usersテーブルの定義
+\d profiles      # profilesテーブルの定義
 \q               # 終了
-SELECT * FROM users;
+SELECT * FROM profiles;
 ```
 
 ### DBリセット（全データ削除）
