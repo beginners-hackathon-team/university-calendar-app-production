@@ -410,7 +410,9 @@ export function applyAssignmentColumnOrder(
 
 // 完了カラムの手動並び順（"kind:id" キー配列）。order が空の場合は done_at 降順。
 export function applyDoneColumnOrder(items: DoneItem[], order: string[]): DoneItem[] {
-  if (order.length === 0) return items;
+  if (order.length === 0) {
+    return [...items].sort((a, b) => getDoneTime(b) - getDoneTime(a));
+  }
   const rank = new Map(order.map((key, idx) => [key, idx]));
   return [...items].sort((a, b) => {
     const ra = rank.has(doneColumnItemKey(a)) ? rank.get(doneColumnItemKey(a))! : Number.MAX_SAFE_INTEGER;

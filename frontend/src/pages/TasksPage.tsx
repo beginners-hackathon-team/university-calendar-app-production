@@ -57,7 +57,6 @@ import {
   columnLabels,
   doneColumnItemKey,
   filterAssignmentsByDeadline,
-  getDoneTime,
   loadAssignmentColumnOrder,
   loadAssignmentFilterMode,
   loadAssignmentSortMode,
@@ -211,7 +210,7 @@ export default function TasksPage() {
     const raw: DoneItem[] = [
       ...assignments.filter(a => a.board_status === 'done').map(a => ({ kind: 'assignment' as const, data: a })),
       ...todos.filter(t => t.is_done).map(t => ({ kind: 'todo' as const, data: t })),
-    ].sort((a, b) => getDoneTime(b) - getDoneTime(a));
+    ];
     return applyDoneColumnOrder(raw, doneColumnOrder);
   }, [assignments, todos, doneColumnOrder]);
   const doneColumnItemsRef = useRef<DoneItem[]>([]);
