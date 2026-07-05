@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { MobileMenu, MobileMenuItem } from './AssignmentColumn';
+import { MobileMenu, MobileMenuItem } from './MobileMenu';
 import { type TodoColumnItem, todoColumnItemKey } from '../../lib/tasksBoard';
 import { getTextRowStyle } from './ui';
 import { AssignmentBlockContent } from './AssignmentBlockContent';

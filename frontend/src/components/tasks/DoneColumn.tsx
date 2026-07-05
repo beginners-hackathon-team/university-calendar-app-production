@@ -3,7 +3,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { type DoneItem, buildAssignmentHref, formatCourseName, formatDateTime } from '../../lib/tasksBoard';
 import { ColumnHeader, ColumnShell, EmptyState, GhostCard, getTextRowStyle } from './ui';
-import { MobileMenu, MobileMenuItem } from './AssignmentColumn';
+import { MobileMenu, MobileMenuItem } from './MobileMenu';
 
 type Props = {
   items: DoneItem[];
