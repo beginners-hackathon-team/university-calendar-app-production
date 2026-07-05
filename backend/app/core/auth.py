@@ -5,6 +5,7 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -73,10 +74,23 @@ def get_admin_user(
 
 
 def ensure_profile(user_id: str, db: Session) -> Profile:
-    """プロファイルが存在しなければ作成する。todos / enrollments 等の FK 違反を防ぐ。"""
+    """プロファイルが存在しなければ作成する。todos / enrollments 等の FK 違反を防ぐ。
+
+    新規ユーザーの初回アクセス時、複数のAPIリクエストがほぼ同時に到達すると
+    どちらも「まだ存在しない」と判定してINSERTしようとし、後勝ちの一方が
+    profiles_pkeyの重複キー違反で失敗しうる。ON CONFLICT DO NOTHINGで
+    その競合を無害化し、結果を取り直す。
+    """
     profile = db.get(Profile, user_id)
-    if not profile:
-        profile = Profile(user_id=user_id, display_name=None, is_admin=False)
-        db.add(profile)
-        db.flush()
-    return profile
+    if profile:
+        return profile
+
+    stmt = (
+        pg_insert(Profile)
+        .values(user_id=user_id, display_name=None, is_admin=False)
+        .on_conflict_do_nothing(index_elements=["user_id"])
+    )
+    db.execute(stmt)
+    db.flush()
+
+    return db.get(Profile, user_id)
