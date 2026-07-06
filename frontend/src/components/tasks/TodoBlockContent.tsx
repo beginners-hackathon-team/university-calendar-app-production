@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { Todo } from '../../api/tasks';
 import { TodoActionButton } from './TodoActionButton';
-import { isCurrentLineEmpty, type CaretPos, type TodoBlockVariant } from './todoBlockHelpers';
+import { isCurrentLineEmpty, isOnFirstVisualLine, isOnLastVisualLine, type CaretPos, type TodoBlockVariant } from './todoBlockHelpers';
 
 // Todo ブロック。複数行入力可能で、空行で次のブロックへ、空ブロックで Backspace すると削除される。
 // リストモードではクリックで編集開始、ブラー時に保存。
@@ -24,6 +24,7 @@ export function TodoBlockContent({
   onDeleteBlock,
   onNavigate,
   onEnsureTrailingBlock,
+  internalFocusMoveRef,
   onMoveToDone,
   startEditRef,
 }: {
@@ -45,6 +46,7 @@ export function TodoBlockContent({
   onDeleteBlock: (id: string, focusPrev: boolean) => void;
   onNavigate: (id: string, dir: 'prev' | 'next') => void;
   onEnsureTrailingBlock?: (id: string) => void;
+  internalFocusMoveRef?: React.MutableRefObject<boolean>;
   onMoveToDone?: () => void;
   startEditRef?: React.MutableRefObject<(() => void) | null>;
 }) {
@@ -175,12 +177,14 @@ export function TodoBlockContent({
 
     if (!collapsed) return;
     if (e.key === 'ArrowUp') {
-      if (!draft.slice(0, caretStart).includes('\n')) {
+      // 折り返し（ソフトラップ）で複数行に見えている場合は、その内部の移動を優先し、
+      // 見た目の先頭行に来たときだけ隣のブロックへ移動する。
+      if (isOnFirstVisualLine(el)) {
         e.preventDefault();
         onNavigate(todo.id, 'prev');
       }
     } else if (e.key === 'ArrowDown') {
-      if (!draft.slice(caretStart).includes('\n')) {
+      if (isOnLastVisualLine(el)) {
         e.preventDefault();
         onNavigate(todo.id, 'next');
       }
@@ -219,7 +223,11 @@ export function TodoBlockContent({
               if (variant === 'list') setIsListEditing(false);
               if (debounceRef.current) window.clearTimeout(debounceRef.current);
               commit(draft);
-              if (variant === 'text' && isLast && draft.trim() !== '') onEnsureTrailingBlock?.(todo.id);
+              // 矢印キー等でブロック間を移動しただけのblurでは、末尾ブロックを増やさない
+              // （編集領域そのものから離れた場合だけ、次に書き続けられるよう空ブロックを確保する）。
+              if (variant === 'text' && isLast && draft.trim() !== '' && !internalFocusMoveRef?.current) {
+                onEnsureTrailingBlock?.(todo.id);
+              }
             }}
             onBeforeInput={handleBeforeInput}
             onKeyDown={handleKeyDown}

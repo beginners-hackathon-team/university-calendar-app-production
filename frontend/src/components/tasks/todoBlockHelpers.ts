@@ -52,13 +52,55 @@ export const nonEditableTextareaHandlers = {
   onDrop: (e: React.DragEvent<HTMLTextAreaElement>) => e.preventDefault(),
 };
 
+// キャレット位置の計測に写す textarea のスタイル（幅・フォント・余白など、折り返し位置に影響するもの）。
+const MIRROR_STYLE_PROPS = [
+  'box-sizing', 'width', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+  'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+  'font-family', 'font-size', 'font-weight', 'font-style', 'letter-spacing', 'line-height',
+  'text-transform', 'word-spacing', 'tab-size',
+];
+
+// textarea は文字がDOMノードとして存在しない（Range/getClientRects が使えない）ため、
+// 同じスタイルを複製した非表示のdivにテキストを流し込み、キャレット位置に置いたマーカーの
+// offsetTop を計測することで「実際に折り返された何行目か」を求める（テキストエリアの
+// キャレット位置測定によく使われる定番の手法）。
+function caretVisualRow(el: HTMLTextAreaElement, caretPos: number): { row: number; totalRows: number } {
+  const style = window.getComputedStyle(el);
+  const mirror = document.createElement('div');
+  mirror.style.position = 'absolute';
+  mirror.style.visibility = 'hidden';
+  mirror.style.top = '0';
+  mirror.style.left = '-9999px';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.wordWrap = 'break-word';
+  mirror.style.overflowWrap = 'break-word';
+  for (const prop of MIRROR_STYLE_PROPS) {
+    mirror.style.setProperty(prop, style.getPropertyValue(prop));
+  }
+
+  mirror.appendChild(document.createTextNode(el.value.slice(0, caretPos)));
+  const marker = document.createElement('span');
+  // 末尾でも高さを測れるよう、キャレット以降のテキスト（無ければゼロ幅スペース）を続ける。
+  marker.textContent = el.value.slice(caretPos) || '​';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+
+  const lineHeight = parseFloat(style.lineHeight) || marker.offsetHeight || 1;
+  const row = Math.round(marker.offsetTop / lineHeight);
+  const totalRows = Math.round(mirror.scrollHeight / lineHeight);
+
+  document.body.removeChild(mirror);
+  return { row, totalRows };
+}
+
 // テキストエリア内で「先頭行/最終行にいるか」を判定する（複数行に折り返している場合は
 // その内部の移動を優先し、端まで来たときだけ隣の行（textarea）へ移動する）。
 export function isOnFirstVisualLine(el: HTMLTextAreaElement): boolean {
-  return !el.value.slice(0, el.selectionStart ?? 0).includes('\n');
+  return caretVisualRow(el, el.selectionStart ?? 0).row <= 0;
 }
 export function isOnLastVisualLine(el: HTMLTextAreaElement): boolean {
-  return !el.value.slice(el.selectionEnd ?? el.value.length).includes('\n');
+  const { row, totalRows } = caretVisualRow(el, el.selectionEnd ?? el.value.length);
+  return row >= totalRows - 1;
 }
 export function focusTextareaAt(el: HTMLTextAreaElement | null, pos: 'start' | 'end') {
   if (!el) return;

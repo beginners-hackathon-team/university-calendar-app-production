@@ -22,8 +22,8 @@ type Props = {
   onChangeTitle: (id: string, title: string) => void;
   onChangeAssignmentTitle: (id: string, taskName: string) => void;
   onCreateTodo: (title: string) => void;
-  onCreateTodoBelow: (afterId: string | null) => Promise<string | undefined>;
-  onCreateTodoBefore: (beforeId: string) => Promise<string | undefined>;
+  onCreateTodoBelow: (afterId: string | null) => string;
+  onCreateTodoBefore: (beforeId: string) => string;
   onDeleteTodo: (id: string) => void;
   onMoveAssignmentToAssignment: (id: string) => void;
   onMoveAssignmentToDone: (id: string) => void;
@@ -58,6 +58,10 @@ export default memo(function TodoColumn({
   onMoveTodoToDone,
 }: Props) {
   const [focusTarget, setFocusTarget] = useState<{ id: string; caret: CaretPos; field?: AssignmentFocusField } | null>(null);
+  // 矢印キー/Enter/Backspaceなどでブロック間を「内部的に」移動している間は true。
+  // ブロックのblurがこの移動によるものか、フォーカスが編集領域の外へ出て行くものかを
+  // 区別するために使う（末尾ブロックの自動確保が誤って過剰発火するのを防ぐ）。
+  const internalFocusMoveRef = useRef(false);
 
   // ブロック作成・削除のフォーカス移譲は Todo 同士の並びだけを対象にする（課題ブロックは作成/削除できないため）。
   const todoItems = useMemo(
@@ -67,22 +71,27 @@ export default memo(function TodoColumn({
   const todoItemsRef = useRef(todoItems);
   todoItemsRef.current = todoItems;
 
-  const handleCreateBelow = useCallback(async (afterId: string | null) => {
-    const newId = await onCreateTodoBelow(afterId);
-    if (newId) setFocusTarget({ id: newId, caret: 'end' });
+  const handleCreateBelow = useCallback((afterId: string | null) => {
+    const newId = onCreateTodoBelow(afterId);
+    internalFocusMoveRef.current = true;
+    setFocusTarget({ id: newId, caret: 'end' });
   }, [onCreateTodoBelow]);
 
   // 課題ブロックの授業名行でEnterしたときなど、指定したブロックの直前に新しいTodoを作る。
-  const handleCreateBefore = useCallback(async (beforeId: string) => {
-    const newId = await onCreateTodoBefore(beforeId);
-    if (newId) setFocusTarget({ id: newId, caret: 'end' });
+  const handleCreateBefore = useCallback((beforeId: string) => {
+    const newId = onCreateTodoBefore(beforeId);
+    internalFocusMoveRef.current = true;
+    setFocusTarget({ id: newId, caret: 'end' });
   }, [onCreateTodoBefore]);
 
   const handleDeleteBlock = useCallback((id: string, focusPrev: boolean) => {
     if (focusPrev) {
       const index = todoItemsRef.current.findIndex(t => t.id === id);
       const prev = index > 0 ? todoItemsRef.current[index - 1] : null;
-      if (prev) setFocusTarget({ id: prev.id, caret: 'end' });
+      if (prev) {
+        internalFocusMoveRef.current = true;
+        setFocusTarget({ id: prev.id, caret: 'end' });
+      }
     }
     onDeleteTodo(id);
   }, [onDeleteTodo]);
@@ -109,6 +118,7 @@ export default memo(function TodoColumn({
     if (!target) return;
     const targetId = target.type === 'todo' ? target.todo.id : target.assignment.id;
     const field: AssignmentFocusField | undefined = target.type === 'assignment' ? (dir === 'prev' ? 'deadline' : 'course') : undefined;
+    internalFocusMoveRef.current = true;
     setFocusTarget({ id: targetId, caret: dir === 'prev' ? 'end' : 'start', field });
   }, []);
 
@@ -127,7 +137,7 @@ export default memo(function TodoColumn({
   useEffect(() => {
     if (viewMode !== 'text') return;
     if (todoItems.length > 0 || busyKeys.has('todo-create')) return;
-    void handleCreateBelow(null);
+    handleCreateBelow(null);
   }, [viewMode, todoItems.length, busyKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // テキストモードでは「そのまま書き続けられる」ように、末尾のブロックに入力して確定（blur）したら
@@ -135,7 +145,7 @@ export default memo(function TodoColumn({
   const ensureTrailingEmptyBlock = useCallback((id: string) => {
     const last = renderItemsRef.current[renderItemsRef.current.length - 1];
     if (last?.type === 'todo' && last.todo.id === id) {
-      void onCreateTodoBelow(id);
+      onCreateTodoBelow(id);
     }
   }, [onCreateTodoBelow]);
 
@@ -188,11 +198,12 @@ export default memo(function TodoColumn({
                       autoFocus={focusTarget?.id === id}
                       caret={focusTarget?.id === id ? focusTarget.caret : 'end'}
                       focusField={focusTarget?.id === id ? focusTarget.field : undefined}
-                      onConsumeFocus={() => setFocusTarget(null)}
+                      onConsumeFocus={() => { setFocusTarget(null); internalFocusMoveRef.current = false; }}
+                      internalFocusMoveRef={internalFocusMoveRef}
                       onChangeTitle={onChangeTitle}
                       onChangeAssignmentTitle={onChangeAssignmentTitle}
-                      onCreateBelow={tid => void handleCreateBelow(tid)}
-                      onCreateBefore={tid => void handleCreateBefore(tid)}
+                      onCreateBelow={handleCreateBelow}
+                      onCreateBefore={handleCreateBefore}
                       onDeleteBlock={handleDeleteBlock}
                       onNavigate={handleNavigate}
                       onEnsureTrailingBlock={ensureTrailingEmptyBlock}

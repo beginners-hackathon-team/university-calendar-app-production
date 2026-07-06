@@ -22,6 +22,7 @@ type Props = {
   caret?: CaretPos;
   focusField?: AssignmentFocusField;
   onConsumeFocus?: () => void;
+  internalFocusMoveRef?: React.MutableRefObject<boolean>;
   onChangeTitle: (id: string, title: string) => void;
   onChangeAssignmentTitle: (id: string, taskName: string) => void;
   onCreateBelow: (afterId: string) => void;
@@ -51,6 +52,7 @@ function TodoBlock({
   caret = 'end',
   focusField,
   onConsumeFocus,
+  internalFocusMoveRef,
   onChangeTitle,
   onChangeAssignmentTitle,
   onCreateBelow,
@@ -162,6 +164,7 @@ function TodoBlock({
           onDeleteBlock={onDeleteBlock}
           onNavigate={onNavigate}
           onEnsureTrailingBlock={onEnsureTrailingBlock}
+          internalFocusMoveRef={internalFocusMoveRef}
           onMoveToDone={onMoveTodoToDone}
           startEditRef={startTodoEditRef}
         />

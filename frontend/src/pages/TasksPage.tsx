@@ -142,7 +142,6 @@ export default function TasksPage() {
       const next = new Set(prev);
       if (busy) next.add(key);
       else next.delete(key);
-      busyKeysRef.current = next;
       return next;
     });
   }, []);
@@ -333,93 +332,100 @@ export default function TasksPage() {
     }
   }, [setBusy]);
 
-  const handleCreateTodoWithTitle = useCallback(async (title: string) => {
-    if (busyKeysRef.current.has('todo-create')) return;
-    setBusy('todo-create', true);
-    setError('');
-    try {
-      const todo = await createTodo(title);
-      setTodos(prev => [...prev, todo]);
+  // Todo作成中（サーバーへPOST中）は仮ID（temp-*）で楽観的にブロックを表示する。
+  // サーバー応答が来ても todos 内の id は温存し（差し替えると入力中の debounce が
+  // 古い id を参照して迷子になるため）、実IDへの対応表だけを pendingCreateIdsRef に持つ。
+  const pendingCreateIdsRef = useRef<Map<string, Promise<string>>>(new Map());
+
+  // Todo/課題を問わずAPI呼び出し直前に使う: 仮IDならサーバー確定を待って実IDへ解決する。
+  const resolveTodoId = useCallback((id: string): Promise<string> => {
+    return pendingCreateIdsRef.current.get(id) ?? Promise.resolve(id);
+  }, []);
+
+  // 仮Todoを作成し、失敗時のロールバックと成功時のID解決を担う。呼び出し側は
+  // 仮IDを即座に受け取れるので、ブロックの表示・フォーカスをネットワーク往復を待たずに行える。
+  const createOptimisticTodo = useCallback((title: string, insertOrder: (tempKey: string) => void): string => {
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    setTodos(prev => [...prev, { id: tempId, title, is_done: false, done_at: null, created_at: now }]);
+    insertOrder(`todo:${tempId}`);
+
+    const promise = createTodo(title)
+      .then(todo => {
+        pendingCreateIdsRef.current.delete(tempId);
+        return todo.id;
+      })
+      .catch((err: unknown) => {
+        pendingCreateIdsRef.current.delete(tempId);
+        console.error(err);
+        setTodos(prev => prev.filter(t => t.id !== tempId));
+        setTodoColumnOrder(prev => {
+          const next = prev.filter(key => key !== `todo:${tempId}`);
+          saveTodoColumnOrder(next);
+          return next;
+        });
+        setError('TODOを追加できませんでした。');
+        throw err;
+      });
+    pendingCreateIdsRef.current.set(tempId, promise);
+    return tempId;
+  }, []);
+
+  const handleCreateTodoWithTitle = useCallback((title: string) => {
+    createOptimisticTodo(title, tempKey => {
       setTodoColumnOrder(prev => {
-        const next = [`todo:${todo.id}`, ...prev];
+        const next = [tempKey, ...prev];
         saveTodoColumnOrder(next);
         return next;
       });
-    } catch (err) {
-      console.error(err);
-      setError('TODOを追加できませんでした。');
-    } finally {
-      setBusy('todo-create', false);
-    }
-  }, [setBusy]);
+    });
+  }, [createOptimisticTodo]);
 
-  const handleCreateTodoBelow = useCallback(async (afterId: string | null): Promise<string | undefined> => {
-    if (busyKeysRef.current.has('todo-create')) return undefined;
-    setBusy('todo-create', true);
-    setError('');
-    try {
-      const todo = await createTodo('');
-      setTodos(prev => [...prev, todo]);
+  const handleCreateTodoBelow = useCallback((afterId: string | null): string => {
+    return createOptimisticTodo('', tempKey => {
       setTodoColumnOrder(prev => {
         const base = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
-        const without = base.filter(key => key !== `todo:${todo.id}`);
+        const without = base.filter(key => key !== tempKey);
         // afterId は Todo の id だけでなく、課題ブロックの id（Enter での新規作成）も指せる。
         const idx = afterId ? without.findIndex(key => key === `todo:${afterId}` || key === `assignment:${afterId}`) : -1;
         const next = [...without];
-        if (idx >= 0) next.splice(idx + 1, 0, `todo:${todo.id}`);
-        else next.push(`todo:${todo.id}`);
+        if (idx >= 0) next.splice(idx + 1, 0, tempKey);
+        else next.push(tempKey);
         saveTodoColumnOrder(next);
         return next;
       });
-      return todo.id;
-    } catch (err) {
-      console.error(err);
-      setError('TODOを追加できませんでした。');
-      return undefined;
-    } finally {
-      setBusy('todo-create', false);
-    }
-  }, [setBusy]);
+    });
+  }, [createOptimisticTodo]);
 
   // 課題ブロックの授業名行でEnterしたときなど、指定したブロックの直前に新しいTodoを作る。
-  const handleCreateTodoBefore = useCallback(async (beforeId: string): Promise<string | undefined> => {
-    if (busyKeysRef.current.has('todo-create')) return undefined;
-    setBusy('todo-create', true);
-    setError('');
-    try {
-      const todo = await createTodo('');
-      setTodos(prev => [...prev, todo]);
+  const handleCreateTodoBefore = useCallback((beforeId: string): string => {
+    return createOptimisticTodo('', tempKey => {
       setTodoColumnOrder(prev => {
         const base = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
-        const newKey = `todo:${todo.id}`;
-        const without = base.filter(key => key !== newKey);
+        const without = base.filter(key => key !== tempKey);
         const idx = without.findIndex(key => key === `todo:${beforeId}` || key === `assignment:${beforeId}`);
         const next = [...without];
-        if (idx >= 0) next.splice(idx, 0, newKey);
-        else next.unshift(newKey);
+        if (idx >= 0) next.splice(idx, 0, tempKey);
+        else next.unshift(tempKey);
         saveTodoColumnOrder(next);
         return next;
       });
-      return todo.id;
-    } catch (err) {
-      console.error(err);
-      setError('TODOを追加できませんでした。');
-      return undefined;
-    } finally {
-      setBusy('todo-create', false);
-    }
-  }, [setBusy]);
+    });
+  }, [createOptimisticTodo]);
 
-  const handleChangeTodoTitle = useCallback(async (id: string, title: string) => {
+  const handleChangeTodoTitle = useCallback((id: string, title: string) => {
     // 楽観更新（即時にローカル反映、その後サーバー保存）。
     setTodos(prev => prev.map(t => (t.id === id ? { ...t, title } : t)));
-    try {
-      await updateTodo(id, { title });
-    } catch (err) {
-      console.error(err);
-      setError('TODOを保存できませんでした。');
-    }
-  }, []);
+    void (async () => {
+      try {
+        const realId = await resolveTodoId(id);
+        await updateTodo(realId, { title });
+      } catch (err) {
+        console.error(err);
+        setError('TODOを保存できませんでした。');
+      }
+    })();
+  }, [resolveTodoId]);
 
   const handleChangeAssignmentTitle = useCallback(async (id: string, taskName: string) => {
     // 楽観更新（即時にローカル反映、その後サーバー保存）。課題名以外（授業名・期限など）は変更不可。
@@ -432,40 +438,49 @@ export default function TasksPage() {
     }
   }, []);
 
-  const handleToggleTodoDone = useCallback(async (id: string, done: boolean) => {
+  const handleToggleTodoDone = useCallback((id: string, done: boolean) => {
     const key = `todo-toggle-${id}`;
     setBusy(key, true);
     setError('');
-    try {
-      const updated = await updateTodo(id, { is_done: done });
-      setTodos(prev => prev.map(t => (t.id === id ? updated : t)));
-    } catch (err) {
-      console.error(err);
-      setError('TODOの状態を更新できませんでした。');
-    } finally {
-      setBusy(key, false);
-    }
-  }, [setBusy]);
+    void (async () => {
+      try {
+        const realId = await resolveTodoId(id);
+        const updated = await updateTodo(realId, { is_done: done });
+        // id は温存する（仮ID解決後もローカルの識別子は変えない）。
+        setTodos(prev => prev.map(t => (t.id === id ? { ...updated, id: t.id } : t)));
+      } catch (err) {
+        console.error(err);
+        setError('TODOの状態を更新できませんでした。');
+      } finally {
+        setBusy(key, false);
+      }
+    })();
+  }, [setBusy, resolveTodoId]);
 
-  const handleDeleteTodo = useCallback(async (id: string) => {
+  // 削除は楽観的に即ローカルへ反映する（作成直後の仮IDに対する削除も、
+  // 実ID解決を待ってからサーバーへ削除リクエストを送る）。
+  const handleDeleteTodo = useCallback((id: string) => {
     const busyKey = `todo-delete-${id}`;
     setBusy(busyKey, true);
     setError('');
-    try {
-      await deleteTodo(id);
-      setTodos(prev => prev.filter(t => t.id !== id));
-      setTodoColumnOrder(prev => {
-        const next = prev.filter(k => k !== `todo:${id}`);
-        saveTodoColumnOrder(next);
-        return next;
-      });
-    } catch (err) {
-      console.error(err);
-      setError('TODOを削除できませんでした。');
-    } finally {
-      setBusy(busyKey, false);
-    }
-  }, [setBusy]);
+    setTodos(prev => prev.filter(t => t.id !== id));
+    setTodoColumnOrder(prev => {
+      const next = prev.filter(k => k !== `todo:${id}`);
+      saveTodoColumnOrder(next);
+      return next;
+    });
+    void (async () => {
+      try {
+        const realId = await resolveTodoId(id);
+        await deleteTodo(realId);
+      } catch (err) {
+        console.error(err);
+        setError('TODOを削除できませんでした。');
+      } finally {
+        setBusy(busyKey, false);
+      }
+    })();
+  }, [setBusy, resolveTodoId]);
 
   // ---- ボタン操作ハンドラ --------------------------------------------
 
@@ -604,8 +619,6 @@ export default function TasksPage() {
   // assignments の最新値を useCallback 内から参照するための ref（moveBoardStatus の snapshot 用）。
   const assignmentsRef = useRef(assignments);
   assignmentsRef.current = assignments;
-  // busyKeys の最新値を useCallback 内から参照するための ref（todo-create の二重送信防止用）。
-  const busyKeysRef = useRef<Set<string>>(new Set());
   // assignmentSortMode の最新値を handleDragEnd の useCallback 内から参照するための ref。
   const assignmentSortModeRef = useRef<AssignmentSortMode>(assignmentSortMode);
   assignmentSortModeRef.current = assignmentSortMode;
