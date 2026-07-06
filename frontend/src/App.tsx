@@ -10,6 +10,7 @@ import TasksPage from "./pages/TasksPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import Layout from "./Layout";
 import { useMe } from "./hooks/useMe";
+import MeProvider from "./providers/MeProvider";
 import { supabase } from "./lib/supabase";
 
 function AppLoader() {
@@ -73,7 +74,7 @@ export default function App() {
             <Route path="/login" element={<GuestRoute session={session} loading={loading}><LoginPage /></GuestRoute>} />
             <Route path="/register" element={<GuestRoute session={session} loading={loading}><RegisterPage /></GuestRoute>} />
 
-            <Route element={<PrivateRoute session={session} loading={loading}><Layout /></PrivateRoute>}>
+            <Route element={<PrivateRoute session={session} loading={loading}><MeProvider><Layout /></MeProvider></PrivateRoute>}>
                 <Route path="/" element={<Navigate to={getHomePath()} replace />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/courses" element={<CoursesPage />} />

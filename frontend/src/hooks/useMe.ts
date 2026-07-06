@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { authFetch } from "../api/client";
+import { createContext, useContext } from "react";
 
 export type Me = {
     id: string;
@@ -8,15 +7,18 @@ export type Me = {
     assignment_sync_mode: 'auto' | 'manual';
 };
 
-export function useMe() {
-    const [me, setMe] = useState<Me | null>(null);
-    const [loading, setLoading] = useState(true);
+export type MeContextValue = {
+    me: Me | null;
+    loading: boolean;
+    isAdmin: boolean;
+};
 
-    useEffect(() => {
-        authFetch('/api/me').then((res) => (res.ok ? res.json() : null))
-            .then((data) => setMe(data))
-            .finally(() => setLoading(false));
-    }, []);
+export const MeContext = createContext<MeContextValue | null>(null);
 
-    return { me, loading, isAdmin: me?.is_admin ?? false };
+export function useMe(): MeContextValue {
+    const ctx = useContext(MeContext);
+    if (!ctx) {
+        throw new Error("useMe must be used within a MeProvider");
+    }
+    return ctx;
 }

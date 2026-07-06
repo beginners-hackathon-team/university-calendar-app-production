@@ -44,15 +44,19 @@ export default function CoursesPage() {
   const [coursesData, setCoursesData] = useState<{ [key: string]: Course }>({});
   const [intensiveCourses, setIntensiveCourses] = useState<Course[]>([]);
   const [selectedYear] = useState(CURRENT_YEAR);
-  const [selectedQuarter, setSelectedQuarter] = useState(getCurrentQuarter);
-  const isMobile = useIsMobile();
-
-  useEffect(() => {
+  const [selectedQuarter, setSelectedQuarter] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const rq = params.get('returnQuarter');
     if (rq) {
       const q = parseInt(rq, 10);
-      if (q >= 1 && q <= 4) setSelectedQuarter(q);
+      if (q >= 1 && q <= 4) return q;
+    }
+    return getCurrentQuarter();
+  });
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('returnQuarter')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
