@@ -137,14 +137,22 @@ export default function CoursesPage() {
           </a>
         </div>
 
-        {/* Timetable card */}
+        {/* Timetable card — mobile: full-bleed (cancel container px-3) so Mon-Fri fill the viewport */}
         <div
           className="bg-white overflow-hidden"
-          style={{
-            borderRadius: 'var(--r-card)',
-            border: '1px solid var(--c-border)',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-          }}
+          style={isMobile
+            ? {
+                marginLeft: -12,
+                marginRight: -12,
+                borderTop: '1px solid var(--c-border)',
+                borderBottom: '1px solid var(--c-border)',
+              }
+            : {
+                borderRadius: 'var(--r-card)',
+                border: '1px solid var(--c-border)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+              }
+          }
         >
           <div className="overflow-x-auto">
             <table
