@@ -21,6 +21,8 @@ export default function EventCreatePopover({ referenceEl, initialData, onSave, o
   const [end, setEnd] = useState(initialData.end ?? '');
   const [allDay, setAllDay] = useState(initialData.allDay ?? false);
   const [color, setColor] = useState(initialData.color ?? EVENT_COLORS[0]?.value ?? '#4f46e5');
+  const [location, setLocation] = useState(initialData.location ?? '');
+  const [description, setDescription] = useState(initialData.description ?? '');
   const [saving, setSaving] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,7 +63,7 @@ export default function EventCreatePopover({ referenceEl, initialData, onSave, o
     if (!title.trim()) return;
     setSaving(true);
     try {
-      await onSave({ title: title.trim(), start, end, allDay, color });
+      await onSave({ title: title.trim(), start, end, allDay, color, location, description });
     } finally {
       setSaving(false);
     }
@@ -140,6 +142,29 @@ export default function EventCreatePopover({ referenceEl, initialData, onSave, o
               value={allDay ? end.split('T')[0] : end}
               onChange={e => setEnd(e.target.value)}
               style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+          <div>
+            <label style={labelStyle}>場所</label>
+            <input
+              type="text"
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              placeholder="場所を追加"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>説明</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="説明を追加"
+              rows={2}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
             />
           </div>
         </div>

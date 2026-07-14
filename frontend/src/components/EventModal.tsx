@@ -19,6 +19,8 @@ export type EventFormData = {
   end: string;
   allDay: boolean;
   color: string;
+  location?: string;
+  description?: string;
 };
 
 type Props = {

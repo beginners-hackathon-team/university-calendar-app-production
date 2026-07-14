@@ -15,7 +15,11 @@ import EventPopover, { type PopoverEventData } from '../components/EventPopover'
 import EventEditPopover from '../components/EventEditPopover';
 import EventCreatePopover from '../components/EventCreatePopover';
 import { CalendarToolbar } from './CalendarToolbar';
+import CalendarSidebar, { type LayerKey } from './CalendarSidebar';
 import { FC_STYLES } from './calendarStyles';
+import { fetchAssignments } from '../api/tasks';
+import { parseTaskDate } from '../lib/tasksBoard';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type EventType = {
   title: string;
@@ -31,6 +35,14 @@ type EventType = {
   extendedProps?: Record<string, unknown>;
 }
 
+const ALL_LAYERS_VISIBLE: Record<LayerKey, boolean> = {
+  personal: true, course: true, task: true, university: true, holiday: true,
+};
+const LAYER_STORAGE_KEY = 'calendar-visible-layers';
+
+const fmtLocalDateTime = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
 /* ── Main component ─────────────────────────────── */
 
 export default function CalendarPage() {
@@ -41,6 +53,16 @@ export default function CalendarPage() {
   });
   const [viewDateRange, setViewDateRange] = useState<{ start: Date; end: Date } | null>(null);
   const [showAllDaySlot, setShowAllDaySlot] = useState(false);
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const [visibleLayers, setVisibleLayers] = useState<Record<LayerKey, boolean>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY) ?? '{}') as Partial<Record<LayerKey, boolean>>;
+      return { ...ALL_LAYERS_VISIBLE, ...saved };
+    } catch {
+      return { ...ALL_LAYERS_VISIBLE };
+    }
+  });
+  const isMobile = useIsMobile(900);
 
   // Custom toolbar state
   const [calendarTitle, setCalendarTitle] = useState('');
@@ -64,7 +86,10 @@ export default function CalendarPage() {
   const popoverEventIdRef = useRef<string | null>(null);
 
   const calendarRef = useRef<FullCalendar>(null);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
   const lastDateClickRef = useRef<number>(0);
+  const lastPopoverCloseRef = useRef<number>(0);
+  const editOpenRef = useRef(false);
   const isProgrammaticSelect = useRef(false);
   const prevViewTypeRef = useRef<string>('');
   const scrollTopRef = useRef<number>(0);
@@ -90,9 +115,19 @@ export default function CalendarPage() {
     setPopoverEvent(null);
     setPopoverAnchorEl(null);
     popoverEventIdRef.current = null;
+    lastPopoverCloseRef.current = Date.now();
   }, []);
 
   useEffect(() => { modalOpenRef.current = modalOpen; }, [modalOpen]);
+  useEffect(() => { editOpenRef.current = selectedEventId !== null; }, [selectedEventId]);
+
+  const toggleLayer = useCallback((key: LayerKey) => {
+    setVisibleLayers(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem(LAYER_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   // 外部イベント（祝日・大学行事・個人予定）の取得
   useEffect(() => {
@@ -150,14 +185,50 @@ export default function CalendarPage() {
           rawId: e.id,
           color: e.color ?? '#4B82F5',
           allDay: e.all_day,
+          location: e.location ?? '',
+          description: e.description ?? '',
         },
       }));
 
+      // 未提出課題の締切をカレンダーに表示（Googleカレンダーのタスク相当）
+      let taskEvents: EventType[] = [];
+      try {
+        const assignments = await fetchAssignments();
+        taskEvents = assignments
+          .filter(a => !a.is_done)
+          .flatMap(a => {
+            const ts = parseTaskDate(a.availability_end);
+            if (ts === null) return [];
+            const due = new Date(ts);
+            const dueDate = getLocalDateString(due);
+            const dueTime = `${String(due.getHours()).padStart(2, '0')}:${String(due.getMinutes()).padStart(2, '0')}`;
+            return [{
+              id: `task-${a.id}`,
+              title: `✓ ${a.task_name}`,
+              start: dueDate,
+              allDay: true,
+              editable: false,
+              display: 'block',
+              color: '#EDE9FE',
+              textColor: '#5B21B6',
+              className: 'is-task',
+              extendedProps: {
+                kind: 'task',
+                rawTitle: a.task_name,
+                courseName: a.course_name,
+                dueText: `${due.getMonth() + 1}月${due.getDate()}日 ${dueTime}`,
+              },
+            }];
+          });
+      } catch {
+        console.warn('課題データの取得に失敗しました');
+      }
+
       setEvents(prev => {
         const systemOnly = prev.filter(e =>
-          !e.id?.startsWith('holiday-') && !e.id?.startsWith('univ-') && !e.id?.startsWith('personal-')
+          !e.id?.startsWith('holiday-') && !e.id?.startsWith('univ-') && !e.id?.startsWith('personal-') && !e.id?.startsWith('task-')
         );
-        return [...systemOnly, ...holidayEvents, ...univEvents, ...personalEvents];
+        return [...systemOnly, ...holidayEvents, ...univEvents, ...personalEvents, ...taskEvents];
       });
     };
 
@@ -230,7 +301,23 @@ export default function CalendarPage() {
     if (selectInfo.allDay) {
       const durationMs = new Date(selectInfo.endStr).getTime() - new Date(selectInfo.startStr).getTime();
       if (durationMs <= 24 * 60 * 60 * 1000) {
-        calendarRef.current?.getApi().unselect();
+        // GCal同様、月ビュー・終日スロットはシングルクリックで終日予定を作成する。
+        // ただしポップオーバーを閉じるためのクリック直後は作成しない
+        if (editOpenRef.current || Date.now() - lastPopoverCloseRef.current < 300) {
+          calendarRef.current?.getApi().unselect();
+          return;
+        }
+        const dateStr = selectInfo.startStr.split('T')[0] ?? selectInfo.startStr;
+        const anchor = (selectInfo.jsEvent?.target as HTMLElement | null)
+          ?? document.querySelector<HTMLElement>('.fc-highlight');
+        // クリックイベントが外クリックハンドラに届いた後に開く
+        setTimeout(() => {
+          setPopoverEvent(null);
+          closeEditPopover();
+          setCreateReferenceEl(anchor);
+          setModalInitial({ title: '', start: dateStr, end: dateStr, allDay: true, color: '#4B82F5' });
+          setModalOpen(true);
+        }, 0);
         return;
       }
     }
@@ -285,6 +372,44 @@ export default function CalendarPage() {
       el.scrollTop = scrollTopRef.current;
     }
   });
+
+  // 「作成」ボタン・cキーからのクイック作成（次の正時から1時間）
+  const openQuickCreate = useCallback((anchor?: HTMLElement | null) => {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+    const end = new Date(start);
+    end.setHours(end.getHours() + 1);
+    setPopoverEvent(null);
+    closeEditPopover();
+    setCreateReferenceEl(anchor ?? calendarWrapRef.current);
+    setModalInitial({ title: '', start: fmtLocalDateTime(start), end: fmtLocalDateTime(end), allDay: false, color: '#4B82F5' });
+    setModalOpen(true);
+  }, [closeEditPopover]);
+
+  // GCal互換キーボードショートカット
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return;
+      if (modalOpenRef.current) return;
+      const api = calendarRef.current?.getApi();
+      if (!api) return;
+      switch (e.key) {
+        case 't': api.today(); break;
+        case 'd': api.changeView('timeGridDay'); break;
+        case 'w': api.changeView('timeGridWeek'); break;
+        case 'm': api.changeView('dayGridMonth'); break;
+        case 'j': case 'n': api.next(); break;
+        case 'k': case 'p': api.prev(); break;
+        case 'c': e.preventDefault(); openQuickCreate(); break;
+        default: return;
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [openQuickCreate]);
 
   const handleDateClick = useCallback((info: DateClickArg) => {
     if (info.allDay) return;
@@ -343,6 +468,8 @@ export default function CalendarPage() {
         end: endForEdit,
         allDay: isAllDay,
         color: (props.color as string) ?? '#4B82F5',
+        location: (props.location as string) ?? '',
+        description: (props.description as string) ?? '',
       });
       setPopoverEvent(null);
       setModalOpen(false);
@@ -382,6 +509,14 @@ export default function CalendarPage() {
         id: evt.id, kind: 'holiday', title: evt.title,
         start: startStr, allDay: true, color: '#ffcccc',
       });
+    } else if (kind === 'task') {
+      setPopoverEvent({
+        id: evt.id, kind: 'task',
+        title: (props.rawTitle as string) ?? evt.title,
+        allDay: true, color: '#A78BFA',
+        courseName: (props.courseName as string | null) ?? undefined,
+        dueText: props.dueText as string | undefined,
+      });
     }
   }, [selectedEventId, closeEditPopover, closePopover]);
 
@@ -392,6 +527,8 @@ export default function CalendarPage() {
       end: data.end ? (data.allDay ? (data.end.split('T')[0] ?? data.end) : data.end) : null,
       all_day: data.allDay,
       color: data.color ?? null,
+      location: data.location?.trim() || null,
+      description: data.description?.trim() || null,
     };
     const saved = await createPersonalEvent(payload);
     setEvents(prev => [...prev, {
@@ -407,6 +544,8 @@ export default function CalendarPage() {
         rawId: saved.id,
         color: saved.color ?? '#4B82F5',
         allDay: saved.all_day,
+        location: saved.location ?? '',
+        description: saved.description ?? '',
       },
     }]);
     setModalOpen(false);
@@ -420,6 +559,8 @@ export default function CalendarPage() {
       end: data.end ? (data.allDay ? (data.end.split('T')[0] ?? data.end) : data.end) : null,
       all_day: data.allDay,
       color: data.color ?? null,
+      location: data.location?.trim() || null,
+      description: data.description?.trim() || null,
     };
     const saved = await updatePersonalEvent(rawId, payload);
     setEvents(prev => prev.map(e =>
@@ -431,7 +572,13 @@ export default function CalendarPage() {
             end: saved.end ?? undefined,
             allDay: saved.all_day,
             color: saved.color ?? '#4B82F5',
-            extendedProps: { ...e.extendedProps, color: saved.color ?? '#4B82F5', allDay: saved.all_day },
+            extendedProps: {
+              ...e.extendedProps,
+              color: saved.color ?? '#4B82F5',
+              allDay: saved.all_day,
+              location: saved.location ?? '',
+              description: saved.description ?? '',
+            },
           }
         : e
     ));
@@ -458,6 +605,8 @@ export default function CalendarPage() {
         end: info.event.endStr ? (isAllDay ? info.event.endStr.slice(0, 10) : toDatetimeLocal(info.event.endStr)) : null,
         all_day: isAllDay,
         color: (info.event.extendedProps.color as string) ?? '#4B82F5',
+        location: (info.event.extendedProps.location as string) || null,
+        description: (info.event.extendedProps.description as string) || null,
       });
       setEvents(prev => prev.map(e =>
         e.id === info.event.id
@@ -469,7 +618,7 @@ export default function CalendarPage() {
     }
   }, []);
 
-  // Filtered events (hide course events on holidays)
+  // Filtered events (hide course events on holidays + respect layer visibility)
   const filteredEvents = (() => {
     const holidayDates = new Set(
       events
@@ -477,6 +626,8 @@ export default function CalendarPage() {
         .map(e => (typeof e.start === 'string' ? e.start.split('T')[0] : ''))
     );
     return events.filter(e => {
+      const kind = (e.extendedProps?.kind as LayerKey | undefined) ?? 'personal';
+      if (visibleLayers[kind] === false) return false;
       if (e.className !== 'is-course') return true;
       const dateOnly = typeof e.start === 'string' ? e.start.split('T')[0] : '';
       return !holidayDates.has(dateOnly);
@@ -495,8 +646,18 @@ export default function CalendarPage() {
         onViewChange={setCurrentView}
       />
 
-      {/* Calendar */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      {/* Sidebar + Calendar */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {!isMobile && (
+          <CalendarSidebar
+            viewDate={viewDate}
+            onSelectDate={(d) => calendarRef.current?.getApi().gotoDate(d)}
+            onCreate={(el) => openQuickCreate(el)}
+            layers={visibleLayers}
+            onToggleLayer={toggleLayer}
+          />
+        )}
+        <div ref={calendarWrapRef} style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
@@ -519,6 +680,9 @@ export default function CalendarPage() {
           datesSet={(arg) => {
             setCalendarTitle(arg.view.title);
             setCurrentView(arg.view.type);
+            setViewDate(prev =>
+              prev.getTime() === arg.view.currentStart.getTime() ? prev : arg.view.currentStart
+            );
 
             const mid = new Date((arg.view.activeStart.getTime() + arg.view.activeEnd.getTime()) / 2);
             const next = { year: mid.getFullYear(), month: mid.getMonth() + 1 };
@@ -632,6 +796,7 @@ export default function CalendarPage() {
 
           events={filteredEvents}
         />
+        </div>
       </div>
 
       {/* 新規作成ポップアップ */}

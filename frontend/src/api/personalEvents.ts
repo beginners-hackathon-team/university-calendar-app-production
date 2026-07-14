@@ -7,6 +7,8 @@ export type PersonalEvent = {
   end: string | null;
   all_day: boolean;
   color: string | null;
+  location: string | null;
+  description: string | null;
 };
 
 export async function fetchPersonalEvents(): Promise<PersonalEvent[]> {
@@ -21,6 +23,8 @@ export type PersonalEventInput = {
   end: string | null;
   all_day: boolean;
   color: string | null;
+  location?: string | null;
+  description?: string | null;
 };
 
 export async function createPersonalEvent(event: PersonalEventInput): Promise<PersonalEvent> {

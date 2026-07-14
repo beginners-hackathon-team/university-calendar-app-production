@@ -25,6 +25,8 @@ export default function EventEditPopover({
   const [end, setEnd] = useState(initialData.end);
   const [allDay, setAllDay] = useState(initialData.allDay);
   const [color, setColor] = useState(initialData.color);
+  const [location, setLocation] = useState(initialData.location ?? '');
+  const [description, setDescription] = useState(initialData.description ?? '');
   const [deleteHover, setDeleteHover] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +116,7 @@ export default function EventEditPopover({
             value={title}
             onChange={e => {
               setTitle(e.target.value);
-              scheduleAutoSave({ title: e.target.value, start, end, allDay, color });
+              scheduleAutoSave({ title: e.target.value, start, end, allDay, color, location, description });
             }}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onClose(); } }}
             placeholder="タイトルを追加"
@@ -133,7 +135,7 @@ export default function EventEditPopover({
               checked={allDay}
               onChange={e => {
                 setAllDay(e.target.checked);
-                scheduleAutoSave({ title, start, end, allDay: e.target.checked, color });
+                scheduleAutoSave({ title, start, end, allDay: e.target.checked, color, location, description });
               }}
               style={{ width: '15px', height: '15px', accentColor: color }}
             />
@@ -149,7 +151,7 @@ export default function EventEditPopover({
               value={allDay ? start.split('T')[0] : start}
               onChange={e => {
                 setStart(e.target.value);
-                scheduleAutoSave({ title, start: e.target.value, end, allDay, color });
+                scheduleAutoSave({ title, start: e.target.value, end, allDay, color, location, description });
               }}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onClose(); } }}
               style={inputStyle}
@@ -162,10 +164,40 @@ export default function EventEditPopover({
               value={allDay ? end.split('T')[0] : end}
               onChange={e => {
                 setEnd(e.target.value);
-                scheduleAutoSave({ title, start, end: e.target.value, allDay, color });
+                scheduleAutoSave({ title, start, end: e.target.value, allDay, color, location, description });
               }}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onClose(); } }}
               style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+          <div>
+            <label style={labelStyle}>場所</label>
+            <input
+              type="text"
+              value={location}
+              onChange={e => {
+                setLocation(e.target.value);
+                scheduleAutoSave({ title, start, end, allDay, color, location: e.target.value, description });
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onClose(); } }}
+              placeholder="場所を追加"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>説明</label>
+            <textarea
+              value={description}
+              onChange={e => {
+                setDescription(e.target.value);
+                scheduleAutoSave({ title, start, end, allDay, color, location, description: e.target.value });
+              }}
+              placeholder="説明を追加"
+              rows={2}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
             />
           </div>
         </div>
@@ -179,7 +211,7 @@ export default function EventEditPopover({
                 type="button"
                 onClick={() => {
                   setColor(c.value);
-                  scheduleAutoSave({ title, start, end, allDay, color: c.value });
+                  scheduleAutoSave({ title, start, end, allDay, color: c.value, location, description });
                 }}
                 style={{
                   width: '26px', height: '26px', borderRadius: '50%',

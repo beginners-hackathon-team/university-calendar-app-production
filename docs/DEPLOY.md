@@ -75,8 +75,9 @@ Web Service → Settings → **Environment Variables**。
 | `APP_URL` | 本番の公開URL（例: `https://<service-name>.onrender.com`） |
 
 ### 7. Auto-Deploy 確認
-Settings → Build & Deploy → Auto-Deploy: **Yes**, Branch: `main`
-→ 以降 `main` への push で自動再デプロイ
+Settings → Build & Deploy → Auto-Deploy: **`After CI Checks Pass`**, Branch: `main`
+→ 以降 `main` への push で、GitHub ActionsのCIが全て通った場合のみ自動再デプロイ
+（CIが落ちたコミットは本番に出ない。詳細は [CICD.md](./CICD.md) 参照）
 
 ### 8. デプロイ確認
 - `https://<service-name>.onrender.com/` でフロントが表示
@@ -148,4 +149,6 @@ git push origin develop
 
 ### 5. Renderのデプロイを確認
 
+CI（GitHub Actions）が全て通ると Render が自動デプロイを開始する。
 Render のダッシュボードでビルドログ・デプロイ完了を確認する。
+CIが失敗した場合はデプロイされないので、修正して再度マージする。

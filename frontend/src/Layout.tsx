@@ -507,40 +507,6 @@ export default function Layout() {
         />
       )}
 
-      {/* ── モバイル向け拡張機能案内 (スマホ・タブレットのみ) ── */}
-      {showExtensionNotice && isHandheld && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: "10px 16px",
-            background: "#F7F8FA",
-            borderBottom: "1px solid var(--c-border)",
-            fontSize: "12px",
-            color: "#4A5568",
-            lineHeight: 1.5,
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true" style={{ flexShrink: 0, color: "#9AA5B4" }}>
-            <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M10 9v5M10 6.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <span style={{ flex: 1 }}>
-            履修情報・課題情報の同期はPC版Chromeの拡張機能から利用できます。
-          </span>
-          <button
-            onClick={() => setBannerDismissed(true)}
-            aria-label="案内を閉じる"
-            style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "#9AA5B4", flexShrink: 0, display: "flex" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      )}
-
       {/* ── Page Content ───────────────────────────────────── */}
       <main>
         <Outlet />

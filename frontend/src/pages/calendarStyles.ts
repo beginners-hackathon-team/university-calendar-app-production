@@ -122,14 +122,15 @@ export const FC_STYLES = `
   .is-personal .fc-event-main { padding: 0; }
 
   /* All-day chips */
-  .is-holiday, .is-univ-event {
+  .is-holiday, .is-univ-event, .is-task {
     border: none !important;
     border-radius: 5px !important;
     font-size: 11px !important;
     font-weight: 600 !important;
   }
   .is-holiday .fc-event-main,
-  .is-univ-event .fc-event-main {
+  .is-univ-event .fc-event-main,
+  .is-task .fc-event-main {
     padding: 1px 6px !important;
   }
 

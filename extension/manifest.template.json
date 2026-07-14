@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KU-tasks同期",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "金沢大学ポータルとWebClass LMSから履修情報・課題情報を取得し、KU-tasksに同期します。",
   "permissions": ["storage", "tabs"],
   "icons": {

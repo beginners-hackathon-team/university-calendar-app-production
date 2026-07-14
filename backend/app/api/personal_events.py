@@ -37,6 +37,8 @@ def create_personal_event(
         end=body.end,
         all_day=body.all_day,
         color=body.color,
+        location=body.location,
+        description=body.description,
     )
     db.add(event)
     db.commit()
@@ -66,6 +68,8 @@ def update_personal_event(
     event.end = body.end
     event.all_day = body.all_day
     event.color = body.color
+    event.location = body.location
+    event.description = body.description
     db.commit()
     db.refresh(event)
     return event

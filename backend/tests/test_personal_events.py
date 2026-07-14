@@ -70,3 +70,34 @@ def test_personal_events_are_scoped_to_owner(client, db_session):
 
     assert client.get("/api/personal-events").json() == []
     assert client.delete(f"/api/personal-events/{other.id}").status_code == 404
+
+
+def test_location_and_description_roundtrip(client):
+    res = _create_event(client, location="中央図書館", description="レポート相談")
+    assert res.status_code == 201
+    body = res.json()
+    assert body["location"] == "中央図書館"
+    assert body["description"] == "レポート相談"
+
+    res = client.put(
+        f"/api/personal-events/{body['id']}",
+        json={
+            "title": body["title"],
+            "start": body["start"],
+            "end": body["end"],
+            "all_day": body["all_day"],
+            "color": body["color"],
+            "location": None,
+            "description": "場所は未定に変更",
+        },
+    )
+    assert res.status_code == 200
+    updated = res.json()
+    assert updated["location"] is None
+    assert updated["description"] == "場所は未定に変更"
+
+
+def test_location_and_description_default_to_none(client):
+    body = _create_event(client).json()
+    assert body["location"] is None
+    assert body["description"] is None

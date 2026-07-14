@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export type PopoverEventData = {
   id: string;
-  kind: 'personal' | 'course' | 'university' | 'holiday';
+  kind: 'personal' | 'course' | 'university' | 'holiday' | 'task';
   title: string;
   start?: string;
   end?: string;
@@ -13,6 +14,9 @@ export type PopoverEventData = {
   teacher?: string;
   // university
   univType?: string;
+  // task
+  courseName?: string;
+  dueText?: string;
 };
 
 type Props = {
@@ -48,6 +52,7 @@ function formatDateTime(s: string | undefined): string {
 
 export default function EventPopover({ event, anchorRect, anchorEl, onEdit, onDelete, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!event) return;
@@ -165,7 +170,41 @@ export default function EventPopover({ event, anchorRect, anchorEl, onEdit, onDe
             <span>{UNIV_TYPE_LABEL[event.univType] ?? event.univType}</span>
           </div>
         )}
+
+        {/* タスク: 期限・科目 */}
+        {event.kind === 'task' && (
+          <>
+            {event.dueText && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '14px' }}>⏰</span>
+                <span>期限: {event.dueText}</span>
+              </div>
+            )}
+            {event.courseName && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '14px' }}>📚</span>
+                <span>{event.courseName}</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      {/* タスクページへのリンク */}
+      {event.kind === 'task' && (
+        <div style={{ padding: '8px 14px 12px', borderTop: '1px solid #f3f4f6' }}>
+          <button
+            onClick={() => { onClose(); navigate('/tasks'); }}
+            style={{
+              width: '100%', padding: '6px', borderRadius: '6px',
+              border: '1px solid #e5e7eb', background: '#fff',
+              color: '#374151', fontSize: '13px', cursor: 'pointer',
+            }}
+          >
+            タスクページで開く
+          </button>
+        </div>
+      )}
 
       {/* 個人予定のアクションボタン */}
       {event.kind === 'personal' && (

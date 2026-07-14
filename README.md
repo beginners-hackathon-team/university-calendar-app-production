@@ -127,3 +127,9 @@ where email = 'admin@example.com';
 
 ## 設計
 [docs/DESIGN.md](docs/DESIGN.md) を参照
+
+
+## テストユーザー
+test@tes.tes
+test1231
+

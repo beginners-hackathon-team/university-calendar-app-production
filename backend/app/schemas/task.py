@@ -12,6 +12,8 @@ class PersonalEventPublic(BaseModel):
     end: Optional[str]
     all_day: bool
     color: Optional[str]
+    location: Optional[str]
+    description: Optional[str]
     created_at: datetime
 
 
@@ -21,6 +23,8 @@ class CreatePersonalEvent(BaseModel):
     end: Optional[str] = None
     all_day: bool = False
     color: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
 
 
 class UpdatePersonalEvent(BaseModel):
@@ -29,6 +33,8 @@ class UpdatePersonalEvent(BaseModel):
     end: Optional[str] = None
     all_day: bool = False
     color: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
 
 
 class AssignmentPublic(BaseModel):

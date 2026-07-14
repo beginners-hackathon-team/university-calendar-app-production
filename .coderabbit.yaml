@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit 設定ファイル
+# https://docs.coderabbit.ai/reference/configuration
+#
+# 導入手順（GitHub App連携が必要・リポジトリ管理者のみ実行可）:
+#   1. https://coderabbit.ai を開き、GitHubアカウントでサインイン
+#   2. 対象Organization（beginners-hackathon-team）を選択し、このリポジトリにインストールを許可
+#   3. インストール後、このファイルがmainブランチにあれば自動的に読み込まれる
+
+language: "ja-JP"
+early_access: false
+
+reviews:
+  profile: chill # quiet(最小限) / chill(標準・推奨) / assertive(細かい指摘まで)
+  request_changes_workflow: false
+  high_level_summary: true
+  collapse_walkthrough: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    # デフォルトブランチ(main)に加えて develop 宛のPRもレビュー対象にする
+    base_branches:
+      - "develop"
+      - "main"
+
+  path_filters:
+    - "!**/*.lock"
+    - "!backend/uv.lock"
+    - "!frontend/package-lock.json"
+    - "!frontend/dist/**"
+    - "!backend/static/**"
+    - "!extension/dist/**"
+    - "!extension/*.zip"
+    - "!**/*.min.js"
+    - "!docs/migration/**"
+    - "!frontend/playwright-report/**"
+    - "!frontend/test-results/**"
+
+  path_instructions:
+    - path: "backend/**/*.py"
+      instructions: |
+        FastAPI + SQLAlchemy + Alembic のバックエンドコードです。
+        - ruff (line-length 88, pyproject.toml の [tool.ruff]) の規約に沿っているか
+        - エンドポイントの認証・認可（get_current_user, is_admin）が抜けていないか
+        - DBセッションのcommit/rollback、N+1クエリなど
+        このプロジェクトはエンジニア志望の学生の学習用（AGENTS.md参照）です。
+        指摘には「なぜ直すべきか」の理由を必ず添え、初心者にも分かる言葉で説明してください。
+
+    - path: "backend/alembic/versions/**"
+      instructions: |
+        Alembicマイグレーションです。upgrade/downgradeの対称性、既存データがある前提での
+        破壊的変更（NOT NULL追加時のデフォルト値、カラム削除など）に注意してレビューしてください。
+
+    - path: "backend/tests/**"
+      instructions: |
+        pytestテストです。conftest.pyのclient/admin_client/as_adminフィクスチャの使い分けが
+        適切か、正常系だけでなく異常系（403/404/422など）も検証されているか確認してください。
+
+    - path: "frontend/src/**/*.{ts,tsx}"
+      instructions: |
+        React + TypeScript + FullCalendar のフロントエンドコードです。
+        - `any` の多用を避け、型定義が適切か
+        - fetch APIのエラーハンドリング（authFetchラッパー経由か）
+        - useEffectの依存配列漏れ、不要な再フェッチ
+        学習目的のプロジェクトのため、指摘には簡潔な理由説明を添えてください。
+
+    - path: "frontend/src/**/*.test.{ts,tsx}"
+      instructions: |
+        vitest + Testing Library のテストです。実装詳細ではなくユーザーの操作・表示結果を
+        検証しているか（Testing Libraryの思想）を意識してレビューしてください。
+
+    - path: "docker/**"
+      instructions: |
+        Docker関連ファイルです。本番用(docker/prod)は最終イメージにビルドツールや秘密情報が
+        残らないか、マルチステージビルドが適切かを確認してください。
+
+  tools:
+    ruff:
+      enabled: true
+    eslint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    yamllint:
+      enabled: true
+    github-checks:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto
