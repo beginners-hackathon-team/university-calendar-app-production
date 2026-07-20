@@ -273,7 +273,7 @@ const DoneCard = memo(function DoneCard({
             />
           ) : (
             <div
-              onClick={(e) => {
+              onClick={() => {
                 if (!onChangeTitle || isMobile) return; // モバイルはバブルアップさせてexpandを発火
                 pendingFocusRef.current = true;
                 setIsEditing(true);

@@ -11,8 +11,6 @@ export function TodoBlockContent({
   isLast,
   variant,
   isMobile,
-  expanded = false,
-  onExpand,
   autoFocus,
   caret,
   hovered,

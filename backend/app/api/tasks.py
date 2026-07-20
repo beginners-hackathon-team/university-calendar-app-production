@@ -37,8 +37,8 @@ def get_assignments(
         .filter(
             Task.user_id == current_user.user_id,
             Task.type == "assignment",
-            Task.is_hidden == False,
-            ~((Task.is_done == True) & (Task.done_at < cutoff)),
+            Task.is_hidden.is_(False),
+            ~(Task.is_done.is_(True) & (Task.done_at < cutoff)),
         )
         .all()
     )
@@ -193,8 +193,8 @@ def get_todos(
         .filter(
             Task.user_id == current_user.user_id,
             Task.type == "todo",
-            Task.is_hidden == False,
-            ~((Task.is_done == True) & (Task.done_at < cutoff)),
+            Task.is_hidden.is_(False),
+            ~(Task.is_done.is_(True) & (Task.done_at < cutoff)),
         )
         .all()
     )

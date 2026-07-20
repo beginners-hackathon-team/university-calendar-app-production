@@ -24,8 +24,6 @@ export function AssignmentBlockContent({
   systemTypes,
   variant,
   isMobile,
-  expanded = false,
-  onExpand,
   autoFocus = false,
   caret = 'end',
   focusField,

@@ -13,7 +13,7 @@ export default function AdminEventsPage() {
   const [year, setYear] = useState(2026);
   const [events, setEvents] = useState<UniversityEvent[]>([]);
   const [editing, setEditing] = useState<UniversityEvent | null>(null);
-  const [form, setForm] = useState({ name: '', type: 'other', date: '', original_day: '' });
+  const [form, setForm] = useState<{ name: string; type: UniversityEvent['type']; date: string; original_day: string }>({ name: '', type: 'other', date: '', original_day: '' });
 
   const load = async () => {
     const data = await fetchUniversityEvents(year);
@@ -24,9 +24,9 @@ export default function AdminEventsPage() {
   const handleSave = async () => {
     const data = {...form, year};
     if (editing) {
-      await updateUniversityEvent(editing.id, data as any);
+      await updateUniversityEvent(editing.id, data);
     } else {
-      await createUniversityEvent(data as any);
+      await createUniversityEvent(data);
     }
     setForm({ name: '', type: 'other', date: '', original_day: '' });
     setEditing(null);
@@ -56,7 +56,7 @@ export default function AdminEventsPage() {
       <input placeholder="名前" value={form.name}
              onChange={(e) => setForm({ ...form, name: e.target.value })} />
       <select value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              onChange={(e) => setForm({ ...form, type: e.target.value as UniversityEvent['type'] })}>
         {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
       </select>
       <input placeholder="MM-DD" value={form.date}

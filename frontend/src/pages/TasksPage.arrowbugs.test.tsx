@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TasksPage from './TasksPage';
-import type { Todo } from '../api/tasks';
 
 // ユーザー報告の3つの挙動を再現する:
 // 1. 行の先頭で改行すると、以降改行できなくなる？
