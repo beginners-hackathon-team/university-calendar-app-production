@@ -352,7 +352,9 @@ export default function TasksPage() {
 
     const promise = createTodo(title)
       .then(todo => {
-        pendingCreateIdsRef.current.delete(tempId);
+        // 解決後もエントリを残す（削除すると resolveTodoId が仮IDのまま返してしまい、
+        // 以降そのTodoへの更新が実在しないIDに送られて失敗する）。
+        pendingCreateIdsRef.current.set(tempId, Promise.resolve(todo.id));
         return todo.id;
       })
       .catch((err: unknown) => {

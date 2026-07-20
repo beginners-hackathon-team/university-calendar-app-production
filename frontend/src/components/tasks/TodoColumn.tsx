@@ -107,6 +107,12 @@ export default memo(function TodoColumn({
   renderItemsRef.current = renderItems;
   const itemKeys = useMemo(() => renderItems.map(todoColumnItemKey), [renderItems]);
 
+  // ヘッダーの件数表示。テキストモード用の空プレースホルダーは数えない。
+  const meaningfulCount = useMemo(
+    () => items.filter(item => item.type !== 'todo' || item.todo.title.trim() !== '').length,
+    [items],
+  );
+
   // ↑↓キーでのブロック間移動は、表示中の全ブロック（Todo・課題どちらも）を対象にする。
   // 課題ブロックへ移動した場合、表示順に沿って自然に見えるよう、下方向で入るときは授業名、
   // 上方向で入るときは期限に着地する（課題タイトルへ直接着地させたい場合だけ field を省略する）。
@@ -134,11 +140,19 @@ export default memo(function TodoColumn({
 
   // テキストモードに Todo が1つも無ければ、空のブロックを1つ確保する。
   // 件数（todoItems.length）だけを依存にすることで、入力中の文字変更では再発火しない。
+  // ensuringEmptyBlockRef は StrictMode の effect 二重実行などで作成が重複しないようにするための
+  // 同期的なガード（todoItems.length はレンダーが確定するまで更新されないため、それだけでは防げない）。
+  const ensuringEmptyBlockRef = useRef(false);
   useEffect(() => {
     if (viewMode !== 'text') return;
-    if (todoItems.length > 0 || busyKeys.has('todo-create')) return;
+    if (todoItems.length > 0) {
+      ensuringEmptyBlockRef.current = false;
+      return;
+    }
+    if (ensuringEmptyBlockRef.current) return;
+    ensuringEmptyBlockRef.current = true;
     handleCreateBelow(null);
-  }, [viewMode, todoItems.length, busyKeys]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [viewMode, todoItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // テキストモードでは「そのまま書き続けられる」ように、末尾のブロックに入力して確定（blur）したら
   // 新しい空ブロックを末尾に追加する。フォーカスは奪わない（クリックして離れた先を優先する）。
@@ -155,7 +169,7 @@ export default memo(function TodoColumn({
     <ColumnShell setNodeRef={setNodeRef} style={style} highlighted={highlighted}>
       <ColumnHeader
         title="TODO"
-        count={items.length}
+        count={meaningfulCount}
         gripRef={gripRef}
         gripProps={gripProps}
         right={<ViewModeToggle mode={viewMode} onChange={onViewModeChange} />}
