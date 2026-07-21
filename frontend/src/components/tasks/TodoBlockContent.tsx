@@ -117,12 +117,19 @@ export function TodoBlockContent({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commit = (value: string) => {
-    if (value !== todo.title) onChangeTitle(todo.id, value);
+    if (value !== todo.title) {
+      console.log('[DEBUG] commit: todo.id=%s title %o -> %o', todo.id, todo.title, value);
+      onChangeTitle(todo.id, value);
+    }
   };
 
   const scheduleCommit = (value: string) => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => commit(value), 300);
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      console.log('[DEBUG] debounced commit firing: todo.id=%s value=%o', todo.id, value);
+      commit(value);
+    }, 300);
   };
 
   // PC では keydown → beforeinput の順で発火し、keydown で preventDefault() すると
@@ -132,6 +139,7 @@ export function TodoBlockContent({
     if (isCurrentLineEmpty(draft, caretStart)) {
       preventDefault();
       const cleaned = draft.replace(/\n+$/, '');
+      console.log('[DEBUG] applyEmptyLineEnter fired: todo.id=%s title=%o -> cleaned=%o, pendingDebounce=%s', todo.id, draft, cleaned, debounceRef.current !== null);
       setDraft(cleaned);
       commit(cleaned);
       onCreateBelow(todo.id);
@@ -217,6 +225,7 @@ export function TodoBlockContent({
             }}
             onFocus={() => onFocusChange(true)}
             onBlur={() => {
+              console.log('[DEBUG] onBlur: todo.id=%s isLast=%s draft=%o internalFocusMoveRef=%s pendingDebounce=%s', todo.id, isLast, draft, internalFocusMoveRef?.current, debounceRef.current !== null);
               onFocusChange(false);
               if (variant === 'list') setIsListEditing(false);
               if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -224,6 +233,7 @@ export function TodoBlockContent({
               // 矢印キー等でブロック間を移動しただけのblurでは、末尾ブロックを増やさない
               // （編集領域そのものから離れた場合だけ、次に書き続けられるよう空ブロックを確保する）。
               if (variant === 'text' && isLast && draft.trim() !== '' && !internalFocusMoveRef?.current) {
+                console.log('[DEBUG] onBlur -> calling onEnsureTrailingBlock for todo.id=%s', todo.id);
                 onEnsureTrailingBlock?.(todo.id);
               }
             }}

@@ -386,6 +386,7 @@ export default function TasksPage() {
   const handleCreateTodoBelow = useCallback((afterId: string | null): string => {
     return createOptimisticTodo('', tempKey => {
       setTodoColumnOrder(prev => {
+        const usedFallback = prev.length === 0;
         const base = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
         const without = base.filter(key => key !== tempKey);
         // afterId は Todo の id だけでなく、課題ブロックの id（Enter での新規作成）も指せる。
@@ -393,6 +394,7 @@ export default function TasksPage() {
         const next = [...without];
         if (idx >= 0) next.splice(idx + 1, 0, tempKey);
         else next.push(tempKey);
+        console.log('[DEBUG] handleCreateTodoBelow: afterId=%s tempKey=%s usedFallbackBase=%s idx=%s\n  prev=%o\n  next=%o', afterId, tempKey, usedFallback, idx, prev, next);
         saveTodoColumnOrder(next);
         return next;
       });

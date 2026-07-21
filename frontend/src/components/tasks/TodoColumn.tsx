@@ -73,6 +73,7 @@ export default memo(function TodoColumn({
 
   const handleCreateBelow = useCallback((afterId: string | null) => {
     const newId = onCreateTodoBelow(afterId);
+    console.log('[DEBUG] handleCreateBelow: afterId=%s -> newId=%s, internalFocusMoveRef=true', afterId, newId);
     internalFocusMoveRef.current = true;
     setFocusTarget({ id: newId, caret: 'end' });
   }, [onCreateTodoBelow]);
@@ -80,6 +81,7 @@ export default memo(function TodoColumn({
   // 課題ブロックの授業名行でEnterしたときなど、指定したブロックの直前に新しいTodoを作る。
   const handleCreateBefore = useCallback((beforeId: string) => {
     const newId = onCreateTodoBefore(beforeId);
+    console.log('[DEBUG] handleCreateBefore: beforeId=%s -> newId=%s, internalFocusMoveRef=true', beforeId, newId);
     internalFocusMoveRef.current = true;
     setFocusTarget({ id: newId, caret: 'end' });
   }, [onCreateTodoBefore]);
@@ -89,6 +91,7 @@ export default memo(function TodoColumn({
       const index = todoItemsRef.current.findIndex(t => t.id === id);
       const prev = index > 0 ? todoItemsRef.current[index - 1] : null;
       if (prev) {
+        console.log('[DEBUG] handleDeleteBlock: id=%s -> focus prev id=%s, internalFocusMoveRef=true', id, prev.id);
         internalFocusMoveRef.current = true;
         setFocusTarget({ id: prev.id, caret: 'end' });
       }
@@ -124,6 +127,7 @@ export default memo(function TodoColumn({
     if (!target) return;
     const targetId = target.type === 'todo' ? target.todo.id : target.assignment.id;
     const field: AssignmentFocusField | undefined = target.type === 'assignment' ? (dir === 'prev' ? 'deadline' : 'course') : undefined;
+    console.log('[DEBUG] handleNavigate: from id=%s dir=%s -> target id=%s, internalFocusMoveRef=true', id, dir, targetId);
     internalFocusMoveRef.current = true;
     setFocusTarget({ id: targetId, caret: dir === 'prev' ? 'end' : 'start', field });
   }, []);
@@ -158,7 +162,9 @@ export default memo(function TodoColumn({
   // 新しい空ブロックを末尾に追加する。フォーカスは奪わない（クリックして離れた先を優先する）。
   const ensureTrailingEmptyBlock = useCallback((id: string) => {
     const last = renderItemsRef.current[renderItemsRef.current.length - 1];
-    if (last?.type === 'todo' && last.todo.id === id) {
+    const isActuallyLast = last?.type === 'todo' && last.todo.id === id;
+    console.log('[DEBUG] ensureTrailingEmptyBlock called: id=%s, computedLastId=%s, isActuallyLast=%s', id, last?.type === 'todo' ? last.todo.id : last?.type, isActuallyLast);
+    if (isActuallyLast) {
       onCreateTodoBelow(id);
     }
   }, [onCreateTodoBelow]);
@@ -212,7 +218,7 @@ export default memo(function TodoColumn({
                       autoFocus={focusTarget?.id === id}
                       caret={focusTarget?.id === id ? focusTarget.caret : 'end'}
                       focusField={focusTarget?.id === id ? focusTarget.field : undefined}
-                      onConsumeFocus={() => { setFocusTarget(null); internalFocusMoveRef.current = false; }}
+                      onConsumeFocus={() => { console.log('[DEBUG] onConsumeFocus: id=%s, internalFocusMoveRef=false', id); setFocusTarget(null); internalFocusMoveRef.current = false; }}
                       internalFocusMoveRef={internalFocusMoveRef}
                       onChangeTitle={onChangeTitle}
                       onChangeAssignmentTitle={onChangeAssignmentTitle}
