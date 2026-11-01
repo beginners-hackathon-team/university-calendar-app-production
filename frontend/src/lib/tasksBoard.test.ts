@@ -13,6 +13,7 @@ import {
   formatRemainingDeadline,
   getDeadlineRank,
   getDoneTime,
+  getTodoColumnOrderBase,
   groupAssignmentsByCourse,
   loadAssignmentColumnOrder,
   loadAssignmentFilterMode,
@@ -31,6 +32,7 @@ import {
   saveTodoColumnOrder,
   sortAssignments,
   todoColumnItemKey,
+  withResolvedTodoIds,
 } from './tasksBoard';
 
 function makeAssignment(overrides: Partial<Assignment> = {}): Assignment {
@@ -70,6 +72,36 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
 
 beforeEach(() => {
   localStorage.clear();
+});
+
+describe('getTodoColumnOrderBase', () => {
+  const displayed = ['todo:a', 'todo:b'];
+
+  it('保存された並び順が空なら表示順を使う', () => {
+    expect(getTodoColumnOrderBase([], displayed, 'a')).toEqual(displayed);
+  });
+
+  it('基準のブロックが並び順にあれば、保存された並び順をそのまま使う', () => {
+    expect(getTodoColumnOrderBase(['todo:b'], displayed, 'b')).toEqual(['todo:b']);
+    expect(getTodoColumnOrderBase(['assignment:c'], displayed, 'c')).toEqual(['assignment:c']);
+  });
+
+  it('基準のブロックがなければ、表示順に切り替えて表示外のキーは残す', () => {
+    expect(getTodoColumnOrderBase(['todo:b', 'todo:done'], displayed, 'a'))
+      .toEqual(['todo:a', 'todo:b', 'todo:done']);
+  });
+
+  it('基準がなければ、保存された並び順をそのまま使う', () => {
+    expect(getTodoColumnOrderBase(['todo:b'], displayed, null)).toEqual(['todo:b']);
+  });
+});
+
+describe('withResolvedTodoIds', () => {
+  it('確定済みの仮IDだけを実IDへ置き換える', () => {
+    const order = ['todo:temp-1', 'todo:temp-2', 'todo:a', 'assignment:temp-1'];
+    expect(withResolvedTodoIds(order, new Map([['temp-1', 'real-1']])))
+      .toEqual(['todo:real-1', 'todo:temp-2', 'todo:a', 'assignment:temp-1']);
+  });
 });
 
 describe('parseTaskDate', () => {
