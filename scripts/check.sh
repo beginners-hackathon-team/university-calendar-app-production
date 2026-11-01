@@ -17,7 +17,7 @@ TARGET="${1:-all}"
 
 run_backend() {
   echo "==> Backend: ruff check"
-  $COMPOSE exec -T app bash -c "cd backend && uvx ruff check ."
+  $COMPOSE exec -T app bash -c "cd backend && uvx ruff@0.17.3 check ."
   echo "==> Backend: pytest"
   $COMPOSE exec -T app bash -c "cd backend && uv run pytest"
 }

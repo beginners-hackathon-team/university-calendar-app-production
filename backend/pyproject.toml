@@ -27,6 +27,10 @@ dev = [
 line-length = 88
 target-version = "py312"
 
+[tool.ruff.lint]
+# ruffの更新で標準ルールが変わってもCIが落ちないよう、対象ルールを明示する
+select = ["E4", "E7", "E9", "F"]
+
 [tool.ruff.lint.per-file-ignores]
 # alembicの自動生成テンプレートは op / sa をimportした状態で生成されるため、
 # 使っていなくてもエラーにしない（自動生成のたびに発生するのを防ぐ）
