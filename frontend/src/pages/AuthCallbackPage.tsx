@@ -23,7 +23,6 @@ export default function AuthCallbackPage() {
     if (code) {
       // PKCE flow: authorization code を session に交換する
       supabase.auth.exchangeCodeForSession(window.location.href).then(({ data, error: exchangeError }) => {
-        console.log("[AuthCallback] exchangeCodeForSession:", data.session?.user?.email ?? null, "error:", exchangeError?.message ?? null);
         if (exchangeError || !data.session) {
           console.error("[AuthCallback] exchangeCodeForSession failed:", exchangeError?.message);
           navigate("/login", { replace: true });
@@ -33,8 +32,7 @@ export default function AuthCallbackPage() {
       });
     } else {
       // code なし: すでにセッションがあるか確認（implicit flow など）
-      supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-        console.log("[AuthCallback] getSession:", session?.user?.email ?? null, "error:", sessionError?.message ?? null);
+      supabase.auth.getSession().then(({ data: { session } }) => {
         navigate(session ? getHomePath() : "/login", { replace: true });
       });
     }
