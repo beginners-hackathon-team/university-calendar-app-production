@@ -29,7 +29,7 @@ bash scripts/check.sh frontend   # frontendのみ
 
 | 対象 | コマンド（コンテナ内の作業ディレクトリ） |
 |---|---|
-| Backend lint | `cd backend && uvx ruff check .` |
+| Backend lint | `cd backend && uvx ruff@0.17.3 check .` |
 | Backend test | `cd backend && uv run pytest` |
 | Frontend lint | `cd frontend && npm run lint` |
 | Frontend 型チェック | `cd frontend && npm run typecheck` |
