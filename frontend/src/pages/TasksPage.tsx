@@ -57,6 +57,7 @@ import {
   columnLabels,
   doneColumnItemKey,
   filterAssignmentsByDeadline,
+  getTodoColumnOrderBase,
   loadAssignmentColumnOrder,
   loadAssignmentFilterMode,
   loadAssignmentSortMode,
@@ -78,6 +79,7 @@ import {
   saveTodoViewMode,
   saveMobileTab,
   todoColumnItemKey,
+  withResolvedTodoIds,
 } from '../lib/tasksBoard';
 import KanbanBoard from '../components/tasks/KanbanBoard';
 
@@ -285,6 +287,9 @@ export default function TasksPage() {
 
   // ---- TODOカラム並び順ヘルパ -------------------------------------
 
+  // 画面上は仮IDのまま扱うTodoについて、localStorageへ保存するときに使う実IDの対応表。
+  const resolvedTodoIdsRef = useRef<Map<string, string>>(new Map());
+
   const addToTodoColumnOrder = useCallback((id: string, insertBeforeKey?: string) => {
     const key = `assignment:${id}`;
     setTodoColumnOrder(prev => {
@@ -295,12 +300,12 @@ export default function TasksPage() {
         if (to >= 0) {
           const next = [...currentKeys];
           next.splice(to, 0, key);
-          saveTodoColumnOrder(next);
+          saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
           return next;
         }
       }
       const next = [...currentKeys, key];
-      saveTodoColumnOrder(next);
+      saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
       return next;
     });
   }, []);
@@ -310,7 +315,7 @@ export default function TasksPage() {
     setTodoColumnOrder(prev => {
       if (!prev.includes(key)) return prev;
       const next = prev.filter(x => x !== key);
-      saveTodoColumnOrder(next);
+      saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
       return next;
     });
   }, []);
@@ -355,6 +360,11 @@ export default function TasksPage() {
         // 解決後もエントリを残す（削除すると resolveTodoId が仮IDのまま返してしまい、
         // 以降そのTodoへの更新が実在しないIDに送られて失敗する）。
         pendingCreateIdsRef.current.set(tempId, Promise.resolve(todo.id));
+        resolvedTodoIdsRef.current.set(tempId, todo.id);
+        setTodoColumnOrder(prev => {
+          saveTodoColumnOrder(withResolvedTodoIds(prev, resolvedTodoIdsRef.current));
+          return prev;
+        });
         return todo.id;
       })
       .catch((err: unknown) => {
@@ -363,7 +373,7 @@ export default function TasksPage() {
         setTodos(prev => prev.filter(t => t.id !== tempId));
         setTodoColumnOrder(prev => {
           const next = prev.filter(key => key !== `todo:${tempId}`);
-          saveTodoColumnOrder(next);
+          saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
           return next;
         });
         setError('TODOを追加できませんでした。');
@@ -377,7 +387,7 @@ export default function TasksPage() {
     createOptimisticTodo(title, tempKey => {
       setTodoColumnOrder(prev => {
         const next = [tempKey, ...prev];
-        saveTodoColumnOrder(next);
+        saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
         return next;
       });
     });
@@ -386,14 +396,14 @@ export default function TasksPage() {
   const handleCreateTodoBelow = useCallback((afterId: string | null): string => {
     return createOptimisticTodo('', tempKey => {
       setTodoColumnOrder(prev => {
-        const base = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
+        const base = getTodoColumnOrderBase(prev, todoColumnItemsRef.current.map(todoColumnItemKey), afterId);
         const without = base.filter(key => key !== tempKey);
         // afterId は Todo の id だけでなく、課題ブロックの id（Enter での新規作成）も指せる。
         const idx = afterId ? without.findIndex(key => key === `todo:${afterId}` || key === `assignment:${afterId}`) : -1;
         const next = [...without];
         if (idx >= 0) next.splice(idx + 1, 0, tempKey);
         else next.push(tempKey);
-        saveTodoColumnOrder(next);
+        saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
         return next;
       });
     });
@@ -403,13 +413,13 @@ export default function TasksPage() {
   const handleCreateTodoBefore = useCallback((beforeId: string): string => {
     return createOptimisticTodo('', tempKey => {
       setTodoColumnOrder(prev => {
-        const base = prev.length ? prev : todoColumnItemsRef.current.map(todoColumnItemKey);
+        const base = getTodoColumnOrderBase(prev, todoColumnItemsRef.current.map(todoColumnItemKey), beforeId);
         const without = base.filter(key => key !== tempKey);
         const idx = without.findIndex(key => key === `todo:${beforeId}` || key === `assignment:${beforeId}`);
         const next = [...without];
         if (idx >= 0) next.splice(idx, 0, tempKey);
         else next.unshift(tempKey);
-        saveTodoColumnOrder(next);
+        saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
         return next;
       });
     });
@@ -468,7 +478,7 @@ export default function TasksPage() {
     setTodos(prev => prev.filter(t => t.id !== id));
     setTodoColumnOrder(prev => {
       const next = prev.filter(k => k !== `todo:${id}`);
-      saveTodoColumnOrder(next);
+      saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
       return next;
     });
     void (async () => {
@@ -615,7 +625,7 @@ export default function TasksPage() {
     if (from < 0 || to < 0) return;
     const next = arrayMove(keys, from, to);
     setTodoColumnOrder(next);
-    saveTodoColumnOrder(next);
+    saveTodoColumnOrder(withResolvedTodoIds(next, resolvedTodoIdsRef.current));
   }, []);
 
   // assignments の最新値を useCallback 内から参照するための ref（moveBoardStatus の snapshot 用）。

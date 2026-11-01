@@ -220,6 +220,23 @@ export function applyTodoColumnOrder(items: TodoColumnItem[], order: string[]): 
   });
 }
 
+// ブロックを挿入するときに土台にする order キー配列を返す。targetId が保存された並び順に
+// ないと挿入位置を決められないので、表示順に切り替える（表示外のキーは順序を保って残す）。
+export function getTodoColumnOrderBase(order: string[], displayedKeys: string[], targetId: string | null): string[] {
+  if (order.length === 0) return displayedKeys;
+  if (targetId === null) return order;
+  if (order.includes(`todo:${targetId}`) || order.includes(`assignment:${targetId}`)) return order;
+  return [...displayedKeys, ...order.filter(key => !displayedKeys.includes(key))];
+}
+
+// 再読み込み後も位置を復元できるよう、保存する order キーの仮IDを確定済みの実IDへ置き換える。
+export function withResolvedTodoIds(order: string[], resolvedIds: ReadonlyMap<string, string>): string[] {
+  return order.map(key => {
+    const realId = key.startsWith('todo:') ? resolvedIds.get(key.slice('todo:'.length)) : undefined;
+    return realId ? `todo:${realId}` : key;
+  });
+}
+
 // ---- localStorage 読み書き（read 失敗時は既定値へフォールバック）------
 
 function isAssignmentSortMode(value: string | null): value is AssignmentSortMode {
@@ -332,7 +349,10 @@ export function loadTodoColumnOrder(): string[] {
     const raw = localStorage.getItem(TODO_COLUMN_ORDER_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    // 仮IDは再読み込み後に一致するTodoが存在しないので読み捨てる。
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === 'string' && !v.startsWith('todo:temp-'))
+      : [];
   } catch {
     return [];
   }

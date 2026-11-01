@@ -128,3 +128,57 @@ describe('TODOテキストモード: Arrow/Enterの不具合再現', () => {
     expect(values.indexOf('') ).toBe(values.indexOf('todo two') + 1);
   });
 });
+
+describe('TODOテキストモード: 再読み込み後の並び順', () => {
+  beforeEach(() => {
+    installMatchMediaMock();
+    localStorage.clear();
+    localStorage.setItem('ku-todo-view-mode', 'text');
+    vi.clearAllMocks();
+    nextId = 100;
+  });
+
+  async function pressEnterTwiceOn(textarea: HTMLTextAreaElement) {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Enter}');
+  }
+
+  it('保存された並び順に仮IDだけが残っていても、新しいブロックは現在のブロックの下にできる', async () => {
+    localStorage.setItem('ku-todo-column-order', JSON.stringify(['todo:temp-old']));
+    const last = await setupTwoTodos();
+
+    await pressEnterTwiceOn(last);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('textbox').map(el => (el as HTMLTextAreaElement).value))
+        .toEqual(['todo one', 'todo two', '']);
+    });
+  });
+
+  it('保存された並び順にないブロックで改行しても、新しいブロックはそのブロックの下にできる', async () => {
+    localStorage.setItem('ku-todo-column-order', JSON.stringify(['todo:todo-2']));
+    await setupTwoTodos();
+    // 並び順にある todo-2 が先、ない todo-1 が末尾に表示される。
+    const unknown = screen.getByDisplayValue('todo one') as HTMLTextAreaElement;
+
+    await pressEnterTwiceOn(unknown);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('textbox').map(el => (el as HTMLTextAreaElement).value))
+        .toEqual(['todo two', 'todo one', '']);
+    });
+  });
+
+  it('作成が確定すると、保存される並び順は仮IDではなく実IDになる', async () => {
+    const last = await setupTwoTodos();
+
+    await pressEnterTwiceOn(last);
+
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem('ku-todo-column-order') ?? '[]'))
+        .toEqual(['todo:todo-1', 'todo:todo-2', 'todo:todo-new-100']);
+    });
+  });
+});
