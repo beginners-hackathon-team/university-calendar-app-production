@@ -1,12 +1,13 @@
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Integer, Boolean, ForeignKey
+from sqlalchemy import String, Integer, Boolean, ForeignKey, Index
 from app.utils.uuid import uuid_str
 from app.db.base import Base
 
 
 class CourseDate(Base):
     __tablename__ = "course_dates"
+    __table_args__ = (Index("ix_course_dates_course_id", "course_id"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=uuid_str)
     course_id: Mapped[str] = mapped_column(
