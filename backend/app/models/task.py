@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy import String, Boolean, DateTime, Index, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.utils.uuid import uuid_str
 from app.db.base import Base
@@ -9,6 +9,7 @@ from app.db.base import Base
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (Index("ix_tasks_user_id_type", "user_id", "type"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=uuid_str)
     user_id: Mapped[str] = mapped_column(PGUUID(as_uuid=False), nullable=False)

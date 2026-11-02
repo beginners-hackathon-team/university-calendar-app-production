@@ -47,27 +47,19 @@ def import_courses(
         return (year, quarter, day_of_week, period, None)
 
     existing_map: dict[tuple, tuple] = {}
-    enrolled_course_ids = {
-        e.course_id
-        for e in db.query(Enrollment)
+    # 授業ごとに Course を取り直すと N+1 になるため、JOIN で1回にまとめて取得する
+    enrolled_rows = (
+        db.query(Course, CourseDate)
+        .join(CourseDate, CourseDate.course_id == Course.id)
+        .join(Enrollment, Enrollment.course_id == Course.id)
         .filter(Enrollment.user_id == current_user.user_id)
         .all()
-    }
-    if enrolled_course_ids:
-        for cd in (
-            db.query(CourseDate)
-            .filter(CourseDate.course_id.in_(enrolled_course_ids))
-            .all()
-        ):
-            course_obj = (
-                db.query(Course).filter(Course.id == cd.course_id).one_or_none()
-            )
-            if course_obj:
-                key = make_key(
-                    cd.year, cd.quarter, cd.day_of_week, cd.period, course_obj.name
-                )
-                existing_map[key] = (course_obj, cd)
+    )
+    for course_obj, cd in enrolled_rows:
+        key = make_key(cd.year, cd.quarter, cd.day_of_week, cd.period, course_obj.name)
+        existing_map[key] = (course_obj, cd)
 
+    new_courses: list[tuple] = []
     incoming_keys: set[tuple] = set()
     count = 0
     for item in payload.courses:
@@ -94,32 +86,38 @@ def import_courses(
                 lms_system_type=item.lms_system_type,
             )
             db.add(course)
-            db.flush()
-            db.add(
-                CourseDate(
-                    course_id=course.id,
-                    year=item.year,
-                    quarter=item.quarter,
-                    day_of_week=item.day_of_week,
-                    period=item.period,
-                    is_intensive_lct=item.is_intensive_lct,
-                )
-            )
-            db.add(Enrollment(course_id=course.id, user_id=current_user.user_id))
+            new_courses.append((course, item))
             existing_map[key] = (course, CourseDate())
         count += 1
 
+    # course.id は flush 時に採番される。授業ごとに flush すると INSERT が
+    # N回に分かれるため、全 Course をまとめて flush してから子テーブルを作る
+    db.flush()
+    for course, item in new_courses:
+        db.add(
+            CourseDate(
+                course_id=course.id,
+                year=item.year,
+                quarter=item.quarter,
+                day_of_week=item.day_of_week,
+                period=item.period,
+                is_intensive_lct=item.is_intensive_lct,
+            )
+        )
+        db.add(Enrollment(course_id=course.id, user_id=current_user.user_id))
+
     # sync スコープ内にあって今回の取得結果に含まれないコースを削除
+    # enrollments / course_dates は外部キーの ON DELETE CASCADE で一緒に消える
     sync_quarters = set(payload.sync_quarters)
-    for key, (course_obj, cd_obj) in list(existing_map.items()):
-        y, q = key[0], key[1]
-        if y == payload.sync_year and q in sync_quarters and key not in incoming_keys:
-            db.query(Enrollment).filter(
-                Enrollment.course_id == course_obj.id,
-                Enrollment.user_id == current_user.user_id,
-            ).delete()
-            db.query(CourseDate).filter(CourseDate.id == cd_obj.id).delete()
-            db.query(Course).filter(Course.id == course_obj.id).delete()
+    removed_course_ids = {
+        course_obj.id
+        for key, (course_obj, _) in existing_map.items()
+        if key[0] == payload.sync_year
+        and key[1] in sync_quarters
+        and key not in incoming_keys
+    }
+    if removed_course_ids:
+        db.query(Course).filter(Course.id.in_(removed_course_ids)).delete()
 
     db.commit()
     return {"status": "ok", "count": count}

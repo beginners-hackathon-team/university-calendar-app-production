@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy import String, Boolean, DateTime, Index, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.utils.uuid import uuid_str
 from app.db.base import Base
@@ -8,6 +8,7 @@ from app.db.base import Base
 
 class PersonalEvent(Base):
     __tablename__ = "personal_events"
+    __table_args__ = (Index("ix_personal_events_user_id", "user_id"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=uuid_str)
     user_id: Mapped[str] = mapped_column(PGUUID(as_uuid=False), nullable=False)

@@ -213,6 +213,20 @@ university_event（独立、ユーザーに紐づかない）
 日本の祝日は **フロントから [holidays-jp API](https://holidays-jp.github.io/) を直接呼ぶ**。DB には持たない。
 DB に持つのは大学独自のイベントのみ。
 
+### 3.4 インデックス
+
+主キー以外のインデックスは次の5つ。ほぼ全APIが「ログイン中のユーザーの行」を探すため、`user_id` が起点になる。定義はモデルの `__table_args__`。
+
+| インデックス | 使う処理 |
+|---|---|
+| `enrollments(user_id, course_id)` | 履修の取得、`user_id` + `course_id` での履修確認 |
+| `enrollments(course_id)` | `courses` 削除時の `ON DELETE CASCADE` |
+| `course_dates(course_id)` | 開講条件の取得、`ON DELETE CASCADE` |
+| `tasks(user_id, type)` | 課題・Todoの一覧取得 |
+| `personal_events(user_id)` | 個人イベントの一覧取得 |
+
+判断の根拠と計測結果は §8.8 を参照。
+
 ---
 
 ## 4. ビジネスロジック
@@ -490,6 +504,32 @@ frontend/src/
   </Layout>
 </PrivateRoute>
 ```
+
+### 8.8 インデックスとN+1の方針
+
+**前提:** 1万ユーザー（1人あたり履修40・タスク100・個人イベント20）の合成データを、ローカルのDocker上のPostgreSQL 16で計測した。ネットワーク遅延を含まない参考値。
+
+| 対象 | 変更前 | 変更後 |
+|---|---|---|
+| `enrollments` のユーザー検索 | 8.1ms（Parallel Seq Scan） | 0.013ms（Bitmap Index Scan） |
+| `tasks` の課題一覧 | 17.6ms（Parallel Seq Scan） | 0.022ms（Bitmap Index Scan） |
+| `courses` 1行のDELETE（CASCADE込み） | 23.7ms | 0.19ms |
+| 授業同期100件・初回 | 302 SQL | 5 SQL |
+| 授業同期100件・再同期 | 104 SQL / 34.7ms | 3 SQL / 5.0ms |
+| 授業同期100件・全件削除 | 403 SQL / 3,633ms | 3 SQL / 4.1ms |
+
+全件削除は、SQL数の削減だけでは2,172msまでしか縮まなかった。残りの大半はCASCADEが子テーブルを全件スキャンしていた時間で、インデックスで解消した。
+
+**判断:**
+- N+1は、取得をJOINまたは `IN` で1回にまとめて解消する。SQL数が件数に依存しないことは `test_import_courses_statement_count_does_not_grow_with_course_count` で固定している
+- `courses.id` を参照する外部キー側に必ずインデックスを張る。PostgreSQLは参照する側には自動で作らない
+- `tasks` の複合インデックスに `is_hidden` は含めない。ユーザー単位で十分に絞れるうえ、削除のたびに更新される列を含めるとインデックスの更新が増える
+- `university_event(year)` は張らない。250行規模では、インデックスを作ってもプランナーはSeq Scanを選んだ
+- `course_dates(course_id, year, quarter)` にはしない。`course_id` だけで十分に絞れる
+
+**トレードオフ:**
+- 5つの合計で約85MB増える（上記の規模）
+- 書き込みが遅くなる。`tasks` への10万行INSERTは429ms → 508ms（+18%）。読み取りが圧倒的に多いアプリなので許容した
 
 ---
 

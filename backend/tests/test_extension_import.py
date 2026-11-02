@@ -1,3 +1,7 @@
+from contextlib import contextmanager
+
+from sqlalchemy import event
+
 def _course_item(**overrides):
     item = {
         "name": "データ構造とアルゴリズム",
@@ -90,6 +94,83 @@ def test_import_courses_leaves_courses_outside_sync_scope_untouched(client):
 
     listed = client.get("/api/courses/2026-2").json()
     assert len(listed) == 1
+
+
+@contextmanager
+def _count_statements(db_session):
+    """ブロック内で発行されたSQLの数を数える（トランザクション制御は除く）。"""
+    connection = db_session.get_bind()
+    statements = []
+
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        if not statement.startswith(("SAVEPOINT", "RELEASE", "ROLLBACK")):
+            statements.append(statement)
+
+    event.listen(connection, "before_cursor_execute", _record)
+    try:
+        yield statements
+    finally:
+        event.remove(connection, "before_cursor_execute", _record)
+
+
+def _import_statement_counts(client, db_session, size):
+    """同じユーザーの授業を size 件 追加→更新→全削除 したときの各SQL数を返す。"""
+    items = [
+        _course_item(name=f"授業{i}", day_of_week="月火水木金土"[i % 6], period=i // 6 + 1)
+        for i in range(size)
+    ]
+
+    def sync(courses):
+        with _count_statements(db_session) as statements:
+            res = client.post(
+                "/api/extension/import-courses",
+                json={"courses": courses, "sync_year": 2026, "sync_quarters": [1]},
+            )
+        assert res.status_code == 200
+        return len(statements)
+
+    # 初回だけ ensure_profile のINSERTが混ざるので、先に済ませておく
+    sync([])
+    created = sync(items)
+    updated = sync([{**item, "room": "別の教室"} for item in items])
+    deleted = sync([])
+    assert client.get("/api/courses/2026-1").json() == []
+    return created, updated, deleted
+
+
+def test_import_courses_statement_count_does_not_grow_with_course_count(client, db_session):
+    # 授業数に比例してSQLが増える（N+1）と、件数が違うときに一致しなくなる
+    assert _import_statement_counts(client, db_session, 2) == _import_statement_counts(
+        client, db_session, 30
+    )
+
+
+def test_import_courses_applies_create_update_and_delete_in_one_sync(client):
+    client.post(
+        "/api/extension/import-courses",
+        json={
+            "courses": [_course_item(), _course_item(name="英語", day_of_week="火", period=1)],
+            "sync_year": 2026,
+            "sync_quarters": [1],
+        },
+    )
+
+    res = client.post(
+        "/api/extension/import-courses",
+        json={
+            "courses": [
+                _course_item(room="第2講義室"),
+                _course_item(name="線形代数", day_of_week="水", period=3),
+            ],
+            "sync_year": 2026,
+            "sync_quarters": [1],
+        },
+    )
+    assert res.status_code == 200
+
+    listed = {c["name"]: c for c in client.get("/api/courses/2026-1").json()}
+    assert set(listed) == {"データ構造とアルゴリズム", "線形代数"}
+    assert listed["データ構造とアルゴリズム"]["room"] == "第2講義室"
 
 
 def test_import_lms_tasks_creates_task_reachable_via_assignments(client):
