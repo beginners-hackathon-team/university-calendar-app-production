@@ -16,8 +16,13 @@ from app.api import (
     university_events,
 )
 from app.core.config import settings
+from app.core.perf import install_query_listeners, install_timing_middleware
+from app.db.session import engine
 
 app = FastAPI()
+
+install_query_listeners(engine)
+install_timing_middleware(app)
 
 # settings.cors_origins はカンマ区切り文字列（例: "https://example.com,http://localhost:5173"）
 _cors_origins: list[str] = [
