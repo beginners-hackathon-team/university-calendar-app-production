@@ -57,13 +57,6 @@ def get_assignments(
         len(excluded_items),
         len(candidates),
     )
-    for a in excluded_items:
-        logger.info(
-            "[get-assignments] excluded: id=%s kind=%r title=%r",
-            a.id,
-            a.kind,
-            a.title,
-        )
     return candidates
 
 
