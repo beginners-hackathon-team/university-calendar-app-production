@@ -81,6 +81,7 @@ import {
   todoColumnItemKey,
   withResolvedTodoIds,
 } from '../lib/tasksBoard';
+import { reportInitialLoad } from '../lib/perf';
 import KanbanBoard from '../components/tasks/KanbanBoard';
 
 type DragColumn = 'assignment' | 'todo' | 'done';
@@ -160,6 +161,7 @@ export default function TasksPage() {
       setAssignments(assignmentRows);
       setTodos(todoRows);
       setLmsSystemTypes(systemTypes);
+      reportInitialLoad('tasks');
     } catch (err) {
       console.error(err);
       setError('タスクの読み込みに失敗しました。時間をおいて再読み込みしてください。');

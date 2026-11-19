@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     calendar,
+    client_perf,
     courses,
     extension,
     me,
@@ -50,6 +51,7 @@ app.include_router(extension.router)
 app.include_router(tasks.router)
 app.include_router(personal_events.router)
 app.include_router(privacy.router)
+app.include_router(client_perf.router)
 
 
 # 静的ファイル配信（本番のみ）

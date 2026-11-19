@@ -26,6 +26,20 @@ GET /api/health
 
 ---
 
+## 性能計測（perf）
+
+```
+POST /api/perf/client
+  req: { page, total_ms, api_count, api_wall_ms, server_ms, apis? }   # page は "courses" | "tasks"
+  res: 204
+```
+
+フロントが「ページを開いてから最初の画面のデータが表示されるまで」の時間を送り、バックエンドは `perf-client ...` としてログに出すだけ（DBには保存しない）。ページを読み込んで最初に表示した画面の1回だけ送られる。
+
+あわせて、すべての `/api/` のレスポンスに `Server-Timing` ヘッダー（`db` / `app` / `total`）が付き、ログに `perf ...` が出る（`app/core/perf.py`）。
+
+---
+
 ## ユーザー情報（me / profiles）
 
 ```
