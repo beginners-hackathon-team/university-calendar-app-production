@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { periodToTime } from '../periodToTime';
 import { fetchCourses } from '../api/courses';
-import { reportInitialLoad } from '../lib/perf';
+import { reportInitialLoad, startInitialLoad } from '../lib/perf';
 import { buildPortalRegistListUrl, buildAcanthusSsoUrl } from '../lib/universityUrls';
 import { useIsMobile } from '../hooks/useIsMobile';
 
@@ -63,6 +63,7 @@ export default function CoursesPage() {
   }, []);
 
   useEffect(() => {
+    startInitialLoad('courses');
     fetchCourses(selectedYear, selectedQuarter).then((data: Course[]) => {
       const map: { [key: string]: Course } = {};
       const intensive: Course[] = [];

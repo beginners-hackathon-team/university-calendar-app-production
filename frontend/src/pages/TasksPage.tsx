@@ -81,7 +81,7 @@ import {
   todoColumnItemKey,
   withResolvedTodoIds,
 } from '../lib/tasksBoard';
-import { reportInitialLoad } from '../lib/perf';
+import { reportInitialLoad, startInitialLoad } from '../lib/perf';
 import KanbanBoard from '../components/tasks/KanbanBoard';
 
 type DragColumn = 'assignment' | 'todo' | 'done';
@@ -150,6 +150,7 @@ export default function TasksPage() {
   }, []);
 
   const loadTasks = async () => {
+    startInitialLoad('tasks');
     setLoading(true);
     setError('');
     try {

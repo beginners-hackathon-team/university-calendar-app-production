@@ -3,8 +3,6 @@
 // performance.now() はページの読み込み開始からの経過時間なので、
 // 計測するのは「ページを読み込んで最初に表示した画面」の1回だけにする（画面遷移後は測らない）。
 
-import { authFetch } from '../api/client';
-
 export type PerfPage = 'courses' | 'tasks';
 
 export type ApiTimingSummary = {
@@ -50,29 +48,74 @@ export function summarizeApiTimings(entries: ResourceLike[], origin: string): Ap
 
 let reported = false;
 
+// 受信API（/api/perf/client）が受け付ける apis の上限
+const MAX_APIS = 50;
+
+const PAGE_PATHS: Record<PerfPage, string> = { courses: '/courses', tasks: '/tasks' };
+
+// 読み込みから計測までの間に一度でもタブが裏に回ったら、描画が止まって時間が伸びるので送らない。
+// （裏にある間は requestAnimationFrame が止まり、表に戻ってから計測に進むことがある）
+let wasHidden = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') wasHidden = true;
+  });
+}
+
+// ページを読み込んで最初に表示した画面。その画面のデータが表示されたときだけ測る
+let firstPage: PerfPage | null = null;
+
+// 画面がデータの取得を始めるときに呼ぶ。最初に呼んだ画面だけが計測の対象になる
+export function startInitialLoad(page: PerfPage): void {
+  if (firstPage === null) firstPage = page;
+}
+
 export function reportInitialLoad(page: PerfPage): void {
-  if (reported) return;
+  // 最初の画面以外（読み込み後に移った画面）は、ユーザーの操作時間が混ざるので測らない
+  if (reported || page !== firstPage) return;
+  // 計測するのは最初の画面の1回だけ。送らなかった場合も、以降の画面では測らない
   reported = true;
+
+  // 取得が終わる前に別の画面へ移っていたら、その表示は見えていないので送らない
+  if (window.location.pathname !== PAGE_PATHS[page]) return;
 
   // setState の後、React が描画して画面に出るのを待ってから測る（2フレーム待つ）
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // 裏のタブで開いた場合は描画が止まり、体感時間として意味がないので送らない
-      if (document.visibilityState !== 'visible') return;
+      if (wasHidden) return;
 
       const totalMs = performance.now();
       const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
       const summary = summarizeApiTimings(entries, window.location.origin);
-      const payload = { page, total_ms: totalMs, ...summary };
+      const payload = {
+        page,
+        total_ms: totalMs,
+        ...summary,
+        apis: summary.apis.slice(0, MAX_APIS),
+      };
 
       console.info('[perf-client]', payload);
-      void authFetch('/api/perf/client', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }).catch(() => {
-        // 計測の送信に失敗しても、画面の動作には影響させない
-      });
+      void sendReport(payload);
     });
   });
+}
+
+async function sendReport(payload: unknown): Promise<void> {
+  try {
+    // authFetch は 401 のときにログアウトして /login へ移動する。計測の送信でそれが起きないよう、
+    // ここではトークンだけ付けて普通の fetch で送り、結果は見ない。
+    // また lib/supabase は読み込んだ時点で初期化される（環境変数が無いと例外になる）ので、
+    // このモジュールを読み込むだけでそれが起きないよう、送るときに初めて読み込む。
+    const { supabase } = await import('./supabase');
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    await fetch('/api/perf/client', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // 計測の送信に失敗しても、画面の動作には影響させない
+  }
 }
