@@ -107,19 +107,25 @@ def get_courses(
         )
         return []
 
-    course_ids = [enrollment.course_id for enrollment in enrollments]
-    courses = db.query(Course).filter(Course.id.in_(course_ids)).all()
-    course_dates = (
-        db.query(CourseDate)
-        .filter(
-            CourseDate.course_id.in_(course_ids),
-            CourseDate.year == year,
-            CourseDate.quarter == quarter,
+    # 【計測用・一時】N+1 の影響を本番で測るため、履修1件ごとに授業と開講条件を取得する。
+    # 計測後に IN でまとめて取得する形へ戻す
+    course_dates = []
+    course_map = {}
+    for enrollment in enrollments:
+        course = db.query(Course).filter(Course.id == enrollment.course_id).first()
+        if course is None:
+            continue
+        course_map[course.id] = course
+        course_dates.extend(
+            db.query(CourseDate)
+            .filter(
+                CourseDate.course_id == course.id,
+                CourseDate.year == year,
+                CourseDate.quarter == quarter,
+            )
+            .all()
         )
-        .all()
-    )
 
-    course_map = {course.id: course for course in courses}
     result = []
 
     for course_date in course_dates:
