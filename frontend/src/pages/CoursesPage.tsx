@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { periodToTime } from '../periodToTime';
 import { fetchCourses } from '../api/courses';
 import { reportInitialLoad, startInitialLoad } from '../lib/perf';
@@ -45,19 +45,19 @@ export default function CoursesPage() {
   const [coursesData, setCoursesData] = useState<{ [key: string]: Course }>({});
   const [intensiveCourses, setIntensiveCourses] = useState<Course[]>([]);
   const [selectedYear] = useState(CURRENT_YEAR);
-  const [selectedQuarter, setSelectedQuarter] = useState(getCurrentQuarter);
-  const isMobile = useIsMobile();
-  // 【計測用・一時】改善前は returnQuarter 付きで開くと、今のQ→指定Qの順に2回取得する。
-  // 体感時間は「最後に選ばれたQ」のデータが表示された時点で測るため、最新のQを覚えておく
-  const latestQuarter = useRef(selectedQuarter);
-  latestQuarter.current = selectedQuarter;
-
-  useEffect(() => {
+  const [selectedQuarter, setSelectedQuarter] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const rq = params.get('returnQuarter');
     if (rq) {
       const q = parseInt(rq, 10);
-      if (q >= 1 && q <= 4) setSelectedQuarter(q);
+      if (q >= 1 && q <= 4) return q;
+    }
+    return getCurrentQuarter();
+  });
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('returnQuarter')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
@@ -77,7 +77,7 @@ export default function CoursesPage() {
       }
       setCoursesData(map);
       setIntensiveCourses(intensive);
-      if (selectedQuarter === latestQuarter.current) reportInitialLoad('courses');
+      reportInitialLoad('courses');
     });
   }, [selectedYear, selectedQuarter]);
 
